@@ -1,0 +1,23 @@
+# Core
+fastapi
+uvicorn[standard]
+websockets
+python-dotenv
+pydantic
+pydantic-settings
+
+# Google Cloud
+google-cloud-speech
+google-cloud-texttospeech
+
+# LLM
+langchain
+langgraph
+langchain-openai
+# openai==1.6.1
+
+# Audio
+webrtcvad
+
+# HTTP
+httpx
