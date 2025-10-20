@@ -14,6 +14,7 @@ google-cloud-texttospeech
 langchain
 langgraph
 langchain-openai
+langgraph-checkpoint-sqlite
 # openai==1.6.1
 
 # Audio
