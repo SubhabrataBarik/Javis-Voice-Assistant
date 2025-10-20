@@ -2,7 +2,12 @@ from langchain_openai import ChatOpenAI
 from VoiceState import VoiceState
 
 # Create the LLM instance
-llm = ChatOpenAI(model="gpt-4o-mini")
+llm = ChatOpenAI(
+    model="gpt-4o-mini",
+    temperature=0.5,
+    max_tokens=500,
+)
+
 
 def llm_service(state: VoiceState):
     """
