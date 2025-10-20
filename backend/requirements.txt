@@ -18,6 +18,7 @@ langgraph-checkpoint-sqlite
 # openai==1.6.1
 
 # Audio
+elevenlabs
 webrtcvad
 
 # HTTP
