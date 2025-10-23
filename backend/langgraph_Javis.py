@@ -11,8 +11,9 @@ from langchain_core.messages import HumanMessage
 
 # Import the LLM service from separate file
 from VoiceState import VoiceState
-from llm_service import llm_service
 from tts_service import tts_service
+from llm_service import llm_service
+from stt_service import stt_service
 
 
 # -------------------
@@ -35,10 +36,12 @@ checkpointer = SqliteSaver(conn=conn)
 # -------------------
 graph = StateGraph(VoiceState)
 
+graph.add_node('stt_service', stt_service)
 graph.add_node('llm_service', llm_service)
 graph.add_node('tts_service', tts_service)
 
-graph.add_edge(START, 'llm_service')
+graph.add_edge(START, 'stt_service')
+graph.add_edge('stt_service', 'llm_service')
 graph.add_edge('llm_service', 'tts_service')
 graph.add_edge('tts_service', END)
 
