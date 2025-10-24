@@ -46,10 +46,12 @@ chatbot = graph.compile(checkpointer=checkpointer)
 # -------------------
 # Chat loop
 # -------------------
-thread_id = "1"
+thread_id = "2"
 
 while True:
     config = {"configurable": {"thread_id": thread_id}}
+
+    # print("\n🎙️ Speak your message now...")
 
     # Run STT -> LLM -> TTS flow
     state = chatbot.invoke({}, config=config)
