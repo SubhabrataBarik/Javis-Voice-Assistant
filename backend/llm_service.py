@@ -7,7 +7,7 @@ llm = ChatOpenAI(
     temperature=0.5,
     max_tokens=500,
 )
-
+TURN_LIMIT = 4  # Number of conversation turns to remember
 
 def llm_service(state: VoiceState):
     """
@@ -16,7 +16,10 @@ def llm_service(state: VoiceState):
     """
 
     # take user query from state
-    messages = state['messages']
+    messages = state["messages"]
+    # Limit to last TURN_LIMIT * 2 messages (each turn = user + assistant)
+    trimmed_messages = messages[-TURN_LIMIT * 2:]
+
     # Add system prompt
     system_prompt = {
         "role": "system",
@@ -26,8 +29,12 @@ def llm_service(state: VoiceState):
     }
 
     # Combine system + user messages
-    full_messages = [system_prompt] + messages
+    # 4 turns = 8 messages (user+assistant) (4 Turn is having short term memory)
+    full_messages = [system_prompt] + trimmed_messages
+    # full_messages = [system_prompt] + messages
+
     # send to llm
     response = llm.invoke(full_messages)
     # response store state
-    return {'messages': [response]}
+    # return {'messages': [response]}
+    return {"messages": messages + [response]}
