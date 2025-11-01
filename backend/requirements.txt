@@ -15,6 +15,7 @@ langchain
 langgraph
 langchain-openai
 langgraph-checkpoint-sqlite
+aiosqlite
 # openai==1.6.1
 
 # STT

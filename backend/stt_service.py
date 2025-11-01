@@ -1,10 +1,9 @@
 import logging
-# import threading
-# import time
 import asyncio
 from typing import Type
 from dotenv import load_dotenv
 import os
+import threading
 
 import assemblyai as aai
 from assemblyai.streaming.v3 import (
@@ -28,7 +27,7 @@ from VoiceState import VoiceState
 load_dotenv()
 API_KEY = os.getenv("ASSEMBLYAI_API_KEY")
 DEFAULT_STT_TIMEOUT = float(os.getenv("STT_TIMEOUT", "30"))
-VAD_THRESHOLD = float(os.getenv("VAD_THRESHOLD", "0.5"))  # Fixed: use 0.5, not 3
+VAD_THRESHOLD = float(os.getenv("VAD_THRESHOLD", "0.5"))
 
 if not API_KEY:
     raise ValueError("❌ Missing AssemblyAI API key. Check your .env file.")
@@ -82,11 +81,11 @@ def _get_best_utter(event: TurnEvent) -> str | None:
     return _get_attr(event, "transcript", None)
 
 # -------------------------------
-# The STTService Class
+# The Async STTService Class
 # -------------------------------
-class STTService:
+class AsyncSTTService:
     """
-    Class-based STT service for better organization and reusability
+    Async STT service for better performance and LangGraph integration
     """
     
     def __init__(self, api_key: str, default_timeout: float = 30.0, vad_threshold: float = 0.5):
@@ -94,49 +93,42 @@ class STTService:
         self.default_timeout = default_timeout
         self.vad_threshold = vad_threshold
         
-    def capture_speech(self, timeout: float = None) -> str | None:
+    async def capture_speech(self, timeout: float = None) -> str | None:
         """
-        Capture one finalized utterance from real-time speech input
-        
-        Args:
-            timeout: Maximum time to wait for speech (uses default if None)
-            
-        Returns:
-            The captured utterance text, or None if no speech captured
+        Async capture one finalized utterance from real-time speech input
         """
         if timeout is None:
             timeout = self.default_timeout
             
-        # Shared structures / synchronization
+        # Use asyncio instead of threading
         result = {"utter": None}
-        result_lock = threading.Lock()
-        stop_event = threading.Event()
+        stop_event = asyncio.Event()
+        
+        # ✅ Get reference to current event loop for thread-safe signaling
+        loop = asyncio.get_running_loop()
 
-        # Keep a small pending store in case formatted event arrives a tiny bit later
+        # Keep a small pending store in case formatted event arrives later
         pending_unformatted = {}
-        pending_lock = threading.Lock()
-        # Timer dict to cancel timers if formatted arrives
         pending_timers = {}
 
         # -------------------------------
-        # Callbacks
+        # Callbacks - FIXED: Thread-safe async signaling
         # -------------------------------
         def on_begin(client: Type[StreamingClient], event: BeginEvent):
             logger.info(f"🔹 STT session started: {event.id}")
             print("🎙️ Listening... Speak into your mic")
 
         def _set_result_and_stop(utter_text: str):
-            with result_lock:
-                # set only if not set yet
-                if not result["utter"]:
-                    result["utter"] = utter_text
-                    stop_event.set()
+            # ✅ Thread-safe: Set result and signal from any thread
+            if not result["utter"]:
+                result["utter"] = utter_text
+                # Signal the asyncio event loop from this thread safely
+                loop.call_soon_threadsafe(stop_event.set)
 
         def _pending_timeout_handler(turn_order):
             # If no formatted arrived after grace period, accept pending unformatted
-            with pending_lock:
-                utter = pending_unformatted.pop(turn_order, None)
-                timer = pending_timers.pop(turn_order, None)
+            utter = pending_unformatted.pop(turn_order, None)
+            timer = pending_timers.pop(turn_order, None)
             if utter:
                 _set_result_and_stop(utter)
 
@@ -168,34 +160,29 @@ class STTService:
                     _set_result_and_stop(utter)
                     return
 
-                with pending_lock:
-                    pending_unformatted[turn_order] = utter
-                    # if an old timer exists for this turn, cancel it
-                    t = pending_timers.pop(turn_order, None)
-                    if t:
-                        t.cancel()
-                    # create a small grace timer for formatted replacement (e.g., 0.45s)
-                    timer = threading.Timer(0.45, _pending_timeout_handler, args=(turn_order,))
-                    timer.daemon = True
-                    pending_timers[turn_order] = timer
-                    timer.start()
+                pending_unformatted[turn_order] = utter
+                # if an old timer exists for this turn, cancel it
+                t = pending_timers.pop(turn_order, None)
+                if t:
+                    t.cancel()
+                # create a small grace timer for formatted replacement (e.g., 0.45s)
+                timer = threading.Timer(0.45, _pending_timeout_handler, args=(turn_order,))
+                timer.daemon = True
+                pending_timers[turn_order] = timer
+                timer.start()
                 return
-
-            # Otherwise (partial/not end_of_turn) -> do nothing here
-            return
 
         def on_terminated(client: Type[StreamingClient], event: TerminationEvent):
             # If nothing captured yet, but pending unformatted exist, use the earliest one
-            with pending_lock:
-                pending_items = sorted(pending_unformatted.items(), key=lambda x: x[0])
-                pending_unformatted.clear()
-                # cancel pending timers
-                for t in pending_timers.values():
-                    try:
-                        t.cancel()
-                    except Exception:
-                        pass
-                pending_timers.clear()
+            pending_items = sorted(pending_unformatted.items(), key=lambda x: x[0])
+            pending_unformatted.clear()
+            # cancel pending timers
+            for t in pending_timers.values():
+                try:
+                    t.cancel()
+                except Exception:
+                    pass
+            pending_timers.clear()
 
             if pending_items and not result["utter"]:
                 # take first pending if nothing else captured
@@ -203,8 +190,8 @@ class STTService:
 
         def on_error(client: Type[StreamingClient], error: StreamingError):
             logger.error(f"STT error: {error}")
-            # wake up the main thread to avoid hanging
-            stop_event.set()
+            # ✅ Thread-safe: Signal stop from error handler
+            loop.call_soon_threadsafe(stop_event.set)
 
         # -------------------------------
         # Create client and register callbacks
@@ -213,7 +200,7 @@ class STTService:
             StreamingClientOptions(
                 api_key=self.api_key,
                 api_host="streaming.assemblyai.com",
-                open_timeout=30  # increase handshake timeout here
+                open_timeout=30
             )
         )
         
@@ -233,61 +220,62 @@ class STTService:
             )
         )
 
-        stream_exc = {"error": None}
-        def _stream_thread_fn():
-            try:
-                client.stream(aai.extras.MicrophoneStream(sample_rate=16000))
-            except Exception as e:
-                stream_exc["error"] = e
-                stop_event.set()
-
-        stream_thread = threading.Thread(target=_stream_thread_fn, daemon=True)
-        stream_thread.start()
-
-        # Wait until we get a result or timeout
-        waited = 0.0
-        poll_interval = 0.05 # Interval in seconds for checking if speech completed
-        while not stop_event.is_set() and waited < timeout:
-            time.sleep(poll_interval)
-            waited += poll_interval
-
-        # If we timed out or got a result, ensure stream stops
+        # ✅ ASYNC VERSION - Proper async/thread handling
+        stream_task = None
         try:
-            client.disconnect(terminate=True)
-        except Exception:
-            pass
-
-        # Join stream thread
-        stream_thread.join(timeout=2.0)
-
-        # If stream had exception, raise it so caller can handle/log
-        if stream_exc.get("error"):
-            raise stream_exc["error"]
+            # Start streaming as async task (run in thread pool since streaming is blocking)
+            stream_task = asyncio.create_task(
+                asyncio.to_thread(client.stream, aai.extras.MicrophoneStream(sample_rate=16000))
+            )
+            
+            # Wait for result OR timeout (non-blocking async wait)
+            await asyncio.wait_for(stop_event.wait(), timeout=timeout)
+            
+        except asyncio.TimeoutError:
+            # Timeout reached - that's okay, no speech captured
+            logger.info("STT timeout reached - no speech captured")
+        except Exception as e:
+            logger.error(f"STT streaming error: {e}")
+        finally:
+            # Clean up - disconnect client
+            try:
+                client.disconnect(terminate=True)
+            except Exception as e:
+                logger.error(f"Error disconnecting STT client: {e}")
+            
+            # Cancel streaming task if still running
+            if stream_task and not stream_task.done():
+                stream_task.cancel()
+                try:
+                    await stream_task
+                except asyncio.CancelledError:
+                    pass
+                except Exception as e:
+                    logger.error(f"Error cancelling stream task: {e}")
 
         # Return the final utterance (if any)
-        with result_lock:
-            return result["utter"]
+        return result["utter"]
 
 # -------------------------------
-# Initialize the service instance (GLOBAL)
+# Initialize the async service instance (GLOBAL)
 # -------------------------------
-stt_service_instance = STTService(
+async_stt_service_instance = AsyncSTTService(
     api_key=API_KEY,
     default_timeout=DEFAULT_STT_TIMEOUT,
     vad_threshold=VAD_THRESHOLD
 )
 
 # -------------------------------
-# Simple wrapper function for LangGraph
+# Async wrapper function for LangGraph
 # -------------------------------
-def stt_service(state: VoiceState) -> dict:
+async def stt_service(state: VoiceState) -> dict:
     """
-    Simple wrapper function for LangGraph nodes - calls the class method.
-    This keeps LangGraph integration clean while using the organized class structure.
+    Async wrapper function for LangGraph nodes - calls the async class method.
+    This keeps LangGraph integration clean while using async architecture.
     """
     try:
-        # Use the class instance to capture speech
-        utter_final = stt_service_instance.capture_speech()
+        # Use async call - doesn't block other nodes or the event loop
+        utter_final = await async_stt_service_instance.capture_speech()
         
         if not utter_final:
             # No speech captured within timeout

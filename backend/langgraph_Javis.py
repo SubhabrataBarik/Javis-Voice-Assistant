@@ -4,79 +4,103 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+import asyncio
 import sqlite3
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver  # ✅ Change this import
 from langgraph.graph import StateGraph, START, END
 from langchain_core.messages import HumanMessage
 
-# Import the LLM service from separate file
+# Import the services from separate files
 from VoiceState import VoiceState
-from tts_service import tts_service
-from llm_service import llm_service
-from stt_service import stt_service
+from tts_service import tts_service  # Make sure this is also async
+from llm_service import llm_service  # Make sure this is also async
+from stt_service import stt_service  # Now async
 
 # -------------------
-# Define Function
+# Async Chat loop with proper database setup
 # -------------------
-
-# -------------------
-# Setup database/checkpointer
-# -------------------
-conn = sqlite3.connect(database='Javis.db', check_same_thread=False)
-# Checkpointer
-checkpointer = SqliteSaver(conn=conn)
-
-
-# -------------------
-# Graph definition
-# -------------------
-graph = StateGraph(VoiceState)
-
-graph.add_node('stt_service', stt_service)
-graph.add_node('llm_service', llm_service)
-graph.add_node('tts_service', tts_service)
-graph.add_edge(START, 'stt_service')
-graph.add_edge('stt_service', 'llm_service')
-graph.add_edge('llm_service', 'tts_service')
-graph.add_edge('tts_service', END)
-
-chatbot = graph.compile(checkpointer=checkpointer)
-
-
-# -------------------
-# Chat loop
-# -------------------
-thread_id = "2"
-
-while True:
-    config = {"configurable": {"thread_id": thread_id}}
-
-    # print("\n🎙️ Speak your message now...")
-
-    # Run STT -> LLM -> TTS flow
-    state = chatbot.invoke({}, config=config)
+async def main():
+    """
+    Main async chat loop with async database connection
+    """
+    thread_id = "2"
     
-    # Extract latest user utterance
-    user_message = None
-    if hasattr(state, "messages") and state.messages:
-        user_message = state.messages[-1].content.strip().lower()
-        print("🗣️ You said:", user_message)
+    print("🤖 Javis Voice Assistant Started!")
+    print("🎙️ Say something to begin... (say 'exit', 'bye', or 'quit' to end)")
 
-    # Exit condition
-    if user_message and any(x in user_message for x in ["exit", "bye", "quit"]):
-        print("👋 Ending session.")
-        break
+    # ✅ Use async context manager for AsyncSqliteSaver
+    async with AsyncSqliteSaver.from_conn_string("Javis.db") as checkpointer:
+        
+        # -------------------
+        # Graph definition (same as before but inside async context)
+        # -------------------
+        graph = StateGraph(VoiceState)
 
+        # Add nodes (all async now)
+        graph.add_node('stt_service', stt_service)
+        graph.add_node('llm_service', llm_service)
+        graph.add_node('tts_service', tts_service)
 
+        # Add edges (same as before)
+        graph.add_edge(START, 'stt_service')
+        graph.add_edge('stt_service', 'llm_service')
+        graph.add_edge('llm_service', 'tts_service')
+        graph.add_edge('tts_service', END)
 
-##### TEXT #####
-# thread_id = '1'
-# while True:
+        # Compile the graph with async checkpointer
+        chatbot = graph.compile(checkpointer=checkpointer)
 
-#     user_message = input('User: ')
-#     if user_message.strip().lower() in ['exit', 'bye', 'quit']:
-#         break
+        while True:
+            try:
+                config = {"configurable": {"thread_id": thread_id}}
 
-#     config = {'configurable': {'thread_id': thread_id}}
-#     response = chatbot.invoke({'messages': [HumanMessage(content=user_message)]}, config=config)
-#     print('AI: ', response['messages'][-1].content)
+                print("\n🔄 Starting voice workflow...")
+
+                # ✅ Use ainvoke with async checkpointer
+                state = await chatbot.ainvoke({}, config=config)
+                
+                # Extract latest user utterance for exit checking
+                user_message = None
+                if hasattr(state, "messages") and state.messages:
+                    # Get the last human message (skip assistant responses)
+                    for msg in reversed(state.messages):
+                        if hasattr(msg, 'type') and msg.type == 'human':
+                            user_message = msg.content.strip().lower()
+                            print(f"🗣️ You said: {msg.content}")
+                            break
+
+                # Check for exit conditions
+                if user_message and any(exit_word in user_message for exit_word in ["exit", "bye", "quit", "goodbye"]):
+                    print("👋 Ending session. Goodbye!")
+                    break
+                    
+            except KeyboardInterrupt:
+                print("\n👋 Session interrupted. Goodbye!")
+                break
+            except Exception as e:
+                print(f"❌ Error in voice workflow: {e}")
+                print("🔄 Continuing... Try speaking again.")
+                continue
+
+async def run_assistant():
+    """
+    Wrapper function to run the assistant with proper error handling
+    """
+    try:
+        await main()
+    except Exception as e:
+        print(f"❌ Fatal error: {e}")
+    finally:
+        print("🔚 Voice Assistant Shutdown Complete")
+
+# -------------------
+# Entry Point
+# -------------------
+if __name__ == "__main__":
+    # ✅ Run the async main function
+    try:
+        asyncio.run(run_assistant())
+    except KeyboardInterrupt:
+        print("\n👋 Assistant stopped by user. Goodbye!")
+    except Exception as e:
+        print(f"❌ Failed to start assistant: {e}")
