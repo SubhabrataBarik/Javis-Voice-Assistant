@@ -1,9 +1,8 @@
 import logging
 import asyncio
-from typing import Type
+from typing import Optional, Callable
 from dotenv import load_dotenv
 import os
-import threading
 
 import assemblyai as aai
 from assemblyai.streaming.v3 import (
@@ -46,7 +45,7 @@ def _get_attr(obj, name, default=None):
         return getattr(obj, name, default)
     except Exception:
         try:
-            return obj.get(name, default)  # type: ignore
+            return obj.get(name, default)
         except Exception:
             return default
 
@@ -69,23 +68,21 @@ def _construct_utterance_from_words(event: TurnEvent) -> str | None:
     return " ".join(final_words)
 
 def _get_best_utter(event: TurnEvent) -> str | None:
-    # prefer explicit utterance if present
     utter = _get_attr(event, "utterance", None)
     if utter:
         return utter
-    # next, finalized words
     utter = _construct_utterance_from_words(event)
     if utter:
         return utter
-    # fallback to transcript (may be unformatted)
     return _get_attr(event, "transcript", None)
 
 # -------------------------------
-# The Async STTService Class
+# Clean Async STT Service with asyncio.Event() and asyncio.Queue()
 # -------------------------------
-class AsyncSTTService:
+class CleanAsyncSTTService:
     """
-    Async STT service for better performance and LangGraph integration
+    Clean async STT service using asyncio.Event() and asyncio.Queue()
+    for state management - no threading complexity!
     """
     
     def __init__(self, api_key: str, default_timeout: float = 30.0, vad_threshold: float = 0.5):
@@ -93,108 +90,122 @@ class AsyncSTTService:
         self.default_timeout = default_timeout
         self.vad_threshold = vad_threshold
         
+        # External callback handlers (clean separation)
+        self.on_partial: Optional[Callable[[str], None]] = None
+        self.on_final: Optional[Callable[[str], None]] = None
+        self.on_session_start: Optional[Callable[[str], None]] = None
+        
     async def capture_speech(self, timeout: float = None) -> str | None:
         """
-        Async capture one finalized utterance from real-time speech input
+        Clean async capture using asyncio.Event() and asyncio.Queue()
         """
         if timeout is None:
             timeout = self.default_timeout
             
-        # Use asyncio instead of threading
-        result = {"utter": None}
-        stop_event = asyncio.Event()
+        # ✅ Clean async state management - no locks needed!
+        partial_queue = asyncio.Queue()          # For partial results
+        final_queue = asyncio.Queue()            # For final results  
+        completion_event = asyncio.Event()       # Session completion
+        error_event = asyncio.Event()            # Error signaling
         
-        # ✅ Get reference to current event loop for thread-safe signaling
+        # Get current event loop for thread-safe signaling
         loop = asyncio.get_running_loop()
-
-        # Keep a small pending store in case formatted event arrives later
-        pending_unformatted = {}
-        pending_timers = {}
-
+        
+        # Store for pending formatted results
+        pending_results = {}
+        
         # -------------------------------
-        # Callbacks - FIXED: Thread-safe async signaling
+        # Clean callback handlers
         # -------------------------------
-        def on_begin(client: Type[StreamingClient], event: BeginEvent):
-            logger.info(f"🔹 STT session started: {event.id}")
+        def on_begin(client, event: BeginEvent):
+            session_id = _get_attr(event, "id", "unknown")
+            logger.info(f"🔹 STT session started: {session_id}")
             print("🎙️ Listening... Speak into your mic")
+            
+            # External callback for session start
+            if self.on_session_start:
+                try:
+                    self.on_session_start(session_id)
+                except Exception as e:
+                    logger.error(f"Error in session start callback: {e}")
 
-        def _set_result_and_stop(utter_text: str):
-            # ✅ Thread-safe: Set result and signal from any thread
-            if not result["utter"]:
-                result["utter"] = utter_text
-                # Signal the asyncio event loop from this thread safely
-                loop.call_soon_threadsafe(stop_event.set)
-
-        def _pending_timeout_handler(turn_order):
-            # If no formatted arrived after grace period, accept pending unformatted
-            utter = pending_unformatted.pop(turn_order, None)
-            timer = pending_timers.pop(turn_order, None)
-            if utter:
-                _set_result_and_stop(utter)
-
-        def on_turn(client: Type[StreamingClient], event: TurnEvent):
-            """
-            We prefer formatted + end_of_turn events. If we get an unformatted end_of_turn,
-            store it temporarily and wait a small grace interval for a formatted version.
-            """
+        def on_turn(client, event: TurnEvent):
+            """Clean turn handling with async queues"""
             turn_order = _get_attr(event, "turn_order", None)
             utter = _get_best_utter(event)
             end_of_turn = _get_attr(event, "end_of_turn", False)
             is_formatted = _get_attr(event, "turn_is_formatted", False)
 
-            # Print live intermediate info (useful while debugging)
-            if utter:
-                status = "end_of_turn=True" if end_of_turn else "end_of_turn=False"
-                fmt = "formatted" if is_formatted else "unformatted"
-                print(f"🗣️ {utter} ({status}, {fmt})")
-
-            # If formatted & end_of_turn -> take immediately
-            if end_of_turn and is_formatted and utter:
-                _set_result_and_stop(utter)
+            if not utter:
                 return
 
-            # If end_of_turn & unformatted -> store temporarily
-            if end_of_turn and utter:
-                if turn_order is None:
-                    # no turn ordering available: accept this utter immediately
-                    _set_result_and_stop(utter)
-                    return
+            # Print live feedback
+            status = "end_of_turn=True" if end_of_turn else "end_of_turn=False"
+            fmt = "formatted" if is_formatted else "unformatted"
+            print(f"🗣️ {utter} ({status}, {fmt})")
 
-                pending_unformatted[turn_order] = utter
-                # if an old timer exists for this turn, cancel it
-                t = pending_timers.pop(turn_order, None)
-                if t:
-                    t.cancel()
-                # create a small grace timer for formatted replacement (e.g., 0.45s)
-                timer = threading.Timer(0.45, _pending_timeout_handler, args=(turn_order,))
-                timer.daemon = True
-                pending_timers[turn_order] = timer
-                timer.start()
+            # Handle partial results (non-blocking)
+            if not end_of_turn:
+                loop.call_soon_threadsafe(
+                    lambda: asyncio.create_task(partial_queue.put(utter))
+                )
+                # External callback for partial
+                if self.on_partial:
+                    try:
+                        self.on_partial(utter)
+                    except Exception as e:
+                        logger.error(f"Error in partial callback: {e}")
                 return
 
-        def on_terminated(client: Type[StreamingClient], event: TerminationEvent):
-            # If nothing captured yet, but pending unformatted exist, use the earliest one
-            pending_items = sorted(pending_unformatted.items(), key=lambda x: x[0])
-            pending_unformatted.clear()
-            # cancel pending timers
-            for t in pending_timers.values():
-                try:
-                    t.cancel()
-                except Exception:
-                    pass
-            pending_timers.clear()
+            # Handle end of turn
+            if end_of_turn:
+                if is_formatted:
+                    # Formatted result - use immediately
+                    loop.call_soon_threadsafe(
+                        lambda: asyncio.create_task(final_queue.put(utter))
+                    )
+                    loop.call_soon_threadsafe(completion_event.set)
+                else:
+                    # Unformatted result - store and wait for formatted version
+                    if turn_order is not None:
+                        pending_results[turn_order] = utter
+                        # Schedule timeout for this result
+                        loop.call_later(
+                            0.45, 
+                            lambda: self._handle_pending_timeout(turn_order, pending_results, final_queue, completion_event)
+                        )
+                    else:
+                        # No turn order - use unformatted immediately  
+                        loop.call_soon_threadsafe(
+                            lambda: asyncio.create_task(final_queue.put(utter))
+                        )
+                        loop.call_soon_threadsafe(completion_event.set)
 
-            if pending_items and not result["utter"]:
-                # take first pending if nothing else captured
-                _set_result_and_stop(pending_items[0][1])
+        def on_terminated(client, event: TerminationEvent):
+            """Clean termination handling"""
+            logger.info("🔹 STT session terminated")
+            
+            # Use any pending results if no final result yet
+            if pending_results and not completion_event.is_set():
+                # Get earliest pending result
+                earliest_order = min(pending_results.keys()) if pending_results else None
+                if earliest_order is not None:
+                    utter = pending_results[earliest_order]
+                    loop.call_soon_threadsafe(
+                        lambda: asyncio.create_task(final_queue.put(utter))
+                    )
+            
+            # Signal completion
+            loop.call_soon_threadsafe(completion_event.set)
 
-        def on_error(client: Type[StreamingClient], error: StreamingError):
+        def on_error(client, error: StreamingError):
+            """Clean error handling"""
             logger.error(f"STT error: {error}")
-            # ✅ Thread-safe: Signal stop from error handler
-            loop.call_soon_threadsafe(stop_event.set)
+            loop.call_soon_threadsafe(error_event.set)
+            loop.call_soon_threadsafe(completion_event.set)
 
         # -------------------------------
-        # Create client and register callbacks
+        # Setup and run streaming
         # -------------------------------
         client = StreamingClient(
             StreamingClientOptions(
@@ -204,13 +215,13 @@ class AsyncSTTService:
             )
         )
         
-        # Register callbacks on the single client instance
+        # Register clean callbacks
         client.on(StreamingEvents.Begin, on_begin)
         client.on(StreamingEvents.Turn, on_turn)
-        client.on(StreamingEvents.Termination, on_terminated)
+        client.on(StreamingEvents.Termination, on_terminated) 
         client.on(StreamingEvents.Error, on_error)
 
-        # Connect and start stream
+        # Connect
         client.connect(
             StreamingParameters(
                 sample_rate=16000,
@@ -220,80 +231,182 @@ class AsyncSTTService:
             )
         )
 
-        # ✅ ASYNC VERSION - Proper async/thread handling
+        # ✅ Clean async execution with proper resource management
         stream_task = None
+        final_result = None
+        
         try:
-            # Start streaming as async task (run in thread pool since streaming is blocking)
+            # Start streaming task
             stream_task = asyncio.create_task(
                 asyncio.to_thread(client.stream, aai.extras.MicrophoneStream(sample_rate=16000))
             )
             
-            # Wait for result OR timeout (non-blocking async wait)
-            await asyncio.wait_for(stop_event.wait(), timeout=timeout)
+            # Start partial result processor
+            partial_task = asyncio.create_task(self._process_partial_results(partial_queue))
             
-        except asyncio.TimeoutError:
-            # Timeout reached - that's okay, no speech captured
-            logger.info("STT timeout reached - no speech captured")
+            # Wait for final result with timeout
+            try:
+                await asyncio.wait_for(completion_event.wait(), timeout=timeout)
+                
+                # Get final result if available
+                if not final_queue.empty():
+                    final_result = await final_queue.get()
+                    
+                # External callback for final result
+                if final_result and self.on_final:
+                    try:
+                        self.on_final(final_result)
+                    except Exception as e:
+                        logger.error(f"Error in final callback: {e}")
+                        
+            except asyncio.TimeoutError:
+                logger.info("STT timeout - no speech captured")
+                
         except Exception as e:
             logger.error(f"STT streaming error: {e}")
         finally:
-            # Clean up - disconnect client
+            # ✅ Clean resource cleanup
             try:
                 client.disconnect(terminate=True)
             except Exception as e:
-                logger.error(f"Error disconnecting STT client: {e}")
+                logger.error(f"Error disconnecting: {e}")
             
-            # Cancel streaming task if still running
+            # Cancel tasks
             if stream_task and not stream_task.done():
                 stream_task.cancel()
                 try:
                     await stream_task
                 except asyncio.CancelledError:
                     pass
-                except Exception as e:
-                    logger.error(f"Error cancelling stream task: {e}")
+                    
+            # Cancel partial processor
+            partial_task.cancel()
+            try:
+                await partial_task
+            except asyncio.CancelledError:
+                pass
 
-        # Return the final utterance (if any)
-        return result["utter"]
+        return final_result
+    
+    def _handle_pending_timeout(self, turn_order: int, pending_results: dict, 
+                              final_queue: asyncio.Queue, completion_event: asyncio.Event):
+        """Handle timeout for pending unformatted results"""
+        if turn_order in pending_results and not completion_event.is_set():
+            utter = pending_results.pop(turn_order)
+            asyncio.create_task(final_queue.put(utter))
+            completion_event.set()
+    
+    async def _process_partial_results(self, partial_queue: asyncio.Queue):
+        """Process partial results as they arrive"""
+        try:
+            while True:
+                # Non-blocking check for partial results
+                try:
+                    partial = await asyncio.wait_for(partial_queue.get(), timeout=0.1)
+                    # Could do something with partial results here
+                    # e.g., update UI in real-time
+                except asyncio.TimeoutError:
+                    continue
+        except asyncio.CancelledError:
+            pass
 
 # -------------------------------
-# Initialize the async service instance (GLOBAL)
+# Service instance with external callbacks
 # -------------------------------
-async_stt_service_instance = AsyncSTTService(
+stt_service_instance = CleanAsyncSTTService(
     api_key=API_KEY,
     default_timeout=DEFAULT_STT_TIMEOUT,
     vad_threshold=VAD_THRESHOLD
 )
 
+# Setup external callbacks for better user experience
+def on_partial_speech(text: str):
+    """Handle partial speech results"""
+    # Could update UI or provide live feedback
+    pass
+
+def on_final_speech(text: str):
+    """Handle final speech results"""
+    print(f"\n🟢 Final utterance captured: {text}")
+
+def on_session_start(session_id: str):
+    """Handle session start"""
+    logger.info(f"Voice session started: {session_id}")
+
+# Configure callbacks
+stt_service_instance.on_partial = on_partial_speech
+stt_service_instance.on_final = on_final_speech  
+stt_service_instance.on_session_start = on_session_start
+
 # -------------------------------
-# Async wrapper function for LangGraph
+# Clean async wrapper for LangGraph
 # -------------------------------
 async def stt_service(state: VoiceState) -> dict:
     """
-    Async wrapper function for LangGraph nodes - calls the async class method.
-    This keeps LangGraph integration clean while using async architecture.
+    Clean async wrapper using asyncio.Event() and asyncio.Queue()
     """
     try:
-        # Use async call - doesn't block other nodes or the event loop
-        utter_final = await async_stt_service_instance.capture_speech()
+        # ✅ Clean async call - no locks, no threading complexity
+        utter_final = await stt_service_instance.capture_speech()
         
         if not utter_final:
-            # No speech captured within timeout
             logger.info("No speech captured within timeout.")
-            return {}  # Return empty dict, don't modify state
+            return {}
 
-        print("\n🟢 Final utterance captured:")
-        print(utter_final)
-
-        # Get existing messages or create empty list
+        # Update state cleanly
         current_messages = getattr(state, "messages", []) or []
-        
-        # Add new message
         updated_messages = current_messages + [HumanMessage(content=utter_final)]
         
-        # Return dict to update state
         return {"messages": updated_messages}
         
     except Exception as e:
         logger.exception("Failed to process utterance: %s", e)
-        return {}  # Return empty dict if failed
+        return {}
+
+# -------------------------------
+# Enhanced version with real-time features
+# -------------------------------
+class EnhancedAsyncSTTService(CleanAsyncSTTService):
+    """
+    Enhanced version with real-time features and better state management
+    """
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.live_transcript = ""
+        self.transcript_queue = asyncio.Queue()
+    
+    async def capture_speech_with_live_updates(self, timeout: float = None) -> str | None:
+        """
+        Enhanced version that provides live transcript updates
+        """
+        # Setup live update callback
+        original_partial = self.on_partial
+        
+        async def live_partial_handler(text: str):
+            self.live_transcript = text
+            await self.transcript_queue.put(text)
+            if original_partial:
+                original_partial(text)
+        
+        # Temporarily override partial handler
+        self.on_partial = live_partial_handler
+        
+        try:
+            # Run capture with live updates
+            result = await self.capture_speech(timeout)
+            return result
+        finally:
+            # Restore original handler
+            self.on_partial = original_partial
+    
+    async def get_live_transcript(self) -> str:
+        """Get the current live transcript"""
+        return self.live_transcript
+
+# Example usage for enhanced features
+enhanced_stt_service = EnhancedAsyncSTTService(
+    api_key=API_KEY,
+    default_timeout=DEFAULT_STT_TIMEOUT, 
+    vad_threshold=VAD_THRESHOLD
+)
