@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 llm = ChatOpenAI(
     model="gpt-4o-mini",
     temperature=0.5,
-    max_tokens=500,
+    max_tokens=25,
 )
 TURN_LIMIT = 4
 

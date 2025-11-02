@@ -21,9 +21,9 @@ from stt_service import stt_service
 class SmartDelayConfig:
     """Configuration for smart dynamic delays"""
     # Base delay settings (in seconds)
-    SHORT_RESPONSE_DELAY = 0.5   # For responses < 50 characters
-    MEDIUM_RESPONSE_DELAY = 1.0  # For responses 50-150 characters  
-    LONG_RESPONSE_DELAY = 2.0    # For responses > 150 characters
+    SHORT_RESPONSE_DELAY = 0.3   # For responses < 50 characters
+    MEDIUM_RESPONSE_DELAY = 0.5  # For responses 50-150 characters  
+    LONG_RESPONSE_DELAY = 1.5    # For responses > 150 characters
     
     # Response length thresholds (in characters)
     SHORT_THRESHOLD = 50
