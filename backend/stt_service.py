@@ -172,7 +172,7 @@ class CleanAsyncSTTService:
                         # Schedule timeout for this result
                         loop.call_later(
                             0.45, 
-                            lambda: self._handle_pending_timeout(turn_order, pending_results, final_queue, completion_event)
+                            lambda: self._handle_pending_timeout(turn_order, pending_results, final_queue, completion_event, loop)
                         )
                     else:
                         # No turn order - use unformatted immediately  
@@ -288,13 +288,17 @@ class CleanAsyncSTTService:
 
         return final_result
     
-    def _handle_pending_timeout(self, turn_order: int, pending_results: dict, 
-                              final_queue: asyncio.Queue, completion_event: asyncio.Event):
-        """Handle timeout for pending unformatted results"""
-        if turn_order in pending_results and not completion_event.is_set():
+    def _handle_pending_timeout(self, turn_order: int,  pending_results: dict, 
+                              final_queue: asyncio.Queue,   completion_event: asyncio.    Event, loop):
+        """Handle timeout for pending unformatted   results"""
+        if turn_order in pending_results and not    completion_event.is_set():
             utter = pending_results.pop(turn_order)
-            asyncio.create_task(final_queue.put(utter))
-            completion_event.set()
+            # ✅ Use thread-safe scheduling
+            loop.call_soon_threadsafe(
+                lambda: asyncio.create_task(final_queue.    put(utter))
+            )
+            loop.call_soon_threadsafe(completion_event. set)
+
     
     async def _process_partial_results(self, partial_queue: asyncio.Queue):
         """Process partial results as they arrive"""
@@ -339,29 +343,76 @@ stt_service_instance.on_final = on_final_speech
 stt_service_instance.on_session_start = on_session_start
 
 # -------------------------------
-# Clean async wrapper for LangGraph
+# Explicit error handling wrapper for LangGraph
 # -------------------------------
 async def stt_service(state: VoiceState) -> dict:
     """
-    Clean async wrapper using asyncio.Event() and asyncio.Queue()
+    Async wrapper with explicit error states for LangGraph routing
     """
     try:
-        # ✅ Clean async call - no locks, no threading complexity
+        # Clean async call
         utter_final = await stt_service_instance.capture_speech()
         
         if not utter_final:
-            logger.info("No speech captured within timeout.")
-            return {}
+            # ✅ Explicit timeout error state
+            return {
+                "status": "error",
+                "error": {
+                    "type": "timeout",
+                    "message": "No speech detected. Please try again.",
+                    "recoverable": True,
+                    "retry_count": state.get("retry_count", 0)
+                }
+            }
 
-        # Update state cleanly
+        # ✅ Success state
         current_messages = getattr(state, "messages", []) or []
         updated_messages = current_messages + [HumanMessage(content=utter_final)]
         
-        return {"messages": updated_messages}
+        return {
+            "messages": updated_messages,
+            "status": "success",
+            "retry_count": 0  # Reset retry count on success
+        }
+        
+    except ConnectionError as e:
+        # ✅ Network error - recoverable
+        logger.error(f"STT Connection error: {e}")
+        return {
+            "status": "error",
+            "error": {
+                "type": "connection",
+                "message": "Internet connection lost. Switching to offline mode.",
+                "recoverable": True,
+                "original_error": str(e)
+            }
+        }
+        
+    except PermissionError as e:
+        # ✅ Microphone permission - user action needed
+        logger.error(f"STT Permission error: {e}")
+        return {
+            "status": "error", 
+            "error": {
+                "type": "permission",
+                "message": "Microphone access denied. Please check your settings.",
+                "recoverable": False,
+                "original_error": str(e)
+            }
+        }
         
     except Exception as e:
-        logger.exception("Failed to process utterance: %s", e)
-        return {}
+        # ✅ Unknown error - not recoverable
+        logger.exception(f"STT Unknown error: {e}")
+        return {
+            "status": "error",
+            "error": {
+                "type": "unknown", 
+                "message": f"Unexpected error: {str(e)}",
+                "recoverable": False,
+                "original_error": str(e)
+            }
+        }
 
 # -------------------------------
 # Enhanced version with real-time features
