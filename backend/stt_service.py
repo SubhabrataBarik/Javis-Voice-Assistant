@@ -1,8 +1,12 @@
 import logging
+import logging.config
+import logging.handlers
 import asyncio
-from typing import Optional, Callable
-from dotenv import load_dotenv
+import time
 import os
+from datetime import datetime
+from typing import Optional, Callable, List, Dict, Any
+from dotenv import load_dotenv
 
 import assemblyai as aai
 from assemblyai.streaming.v3 import (
@@ -32,10 +36,138 @@ if not API_KEY:
     raise ValueError("❌ Missing AssemblyAI API key. Check your .env file.")
 
 # -------------------------------
-# Logging
+# ✅ File-Only Structured Logging Configuration
 # -------------------------------
-logging.basicConfig(level=logging.INFO)
+def setup_file_only_logging():
+    """
+    Enhanced logging configuration with environment variable control
+    Supports log level control, file rotation, and performance optimization
+    """
+    
+    # ✅ Get configuration from environment variables
+    log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+    log_file = os.getenv('LOG_FILE', 'stt_service.log')
+    max_file_size = int(os.getenv('LOG_MAX_SIZE_MB', '10')) * 1024 * 1024  # Convert to bytes
+    
+    # ✅ Log level mapping
+    level_mapping = {
+        'DEBUG': logging.DEBUG,      # Most verbose - everything
+        'INFO': logging.INFO,        # Default - balanced
+        'WARNING': logging.WARNING,  # Less logs - warnings and above
+        'ERROR': logging.ERROR,      # Only errors and critical
+        'CRITICAL': logging.CRITICAL # Almost nothing - only critical
+    }
+    
+    class StructuredFormatter(logging.Formatter):
+        """Enhanced formatter with better performance for different log levels"""
+        
+        def format(self, record):
+            # Base format
+            base_format = '%(asctime)s | %(name)s | %(levelname)s | %(message)s'
+            
+            # Add extra fields (but optimize for performance at higher log levels)
+            if hasattr(record, '__dict__') and record.levelno <= logging.INFO:
+                extras = []
+                for key, value in record.__dict__.items():
+                    if key not in ['name', 'msg', 'args', 'levelname', 'levelno', 
+                                 'pathname', 'filename', 'module', 'lineno', 'funcName',
+                                 'created', 'msecs', 'relativeCreated', 'thread', 'threadName',
+                                 'processName', 'process', 'getMessage', 'asctime']:
+                        # Truncate long values for performance
+                        str_value = str(value)
+                        if len(str_value) > 100:
+                            str_value = str_value[:97] + "..."
+                        extras.append(f"{key}={str_value}")
+                
+                if extras:
+                    base_format += f" | {' | '.join(extras)}"
+            
+            formatter = logging.Formatter(base_format)
+            return formatter.format(record)
+    
+    # ✅ Import rotating file handler for better file management
+    from logging.handlers import RotatingFileHandler
+    
+    # ✅ Create rotating file handler to prevent huge log files
+    file_handler = RotatingFileHandler(
+        log_file, 
+        maxBytes=max_file_size, 
+        backupCount=5,  # Keep 5 old log files (stt_service.log.1, .2, etc.)
+        encoding='utf-8'
+    )
+    file_handler.setFormatter(StructuredFormatter())
+    
+    # ✅ Configure root logger with environment-specified level
+    root_logger = logging.getLogger()
+    selected_level = level_mapping.get(log_level, logging.INFO)
+    root_logger.setLevel(selected_level)
+    
+    # Remove any existing handlers to avoid duplicates
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+    
+    # Add only our file handler
+    root_logger.addHandler(file_handler)
+    
+    # ✅ Performance optimization: Silence noisy third-party loggers based on level
+    if selected_level >= logging.WARNING:
+        # At WARNING level and above, silence noisy libraries completely
+        logging.getLogger('httpx').setLevel(logging.ERROR)
+        logging.getLogger('urllib3').setLevel(logging.ERROR)
+        logging.getLogger('assemblyai').setLevel(logging.ERROR)
+        logging.getLogger('asyncio').setLevel(logging.ERROR)
+    elif selected_level >= logging.INFO:
+        # At INFO level, reduce noise but keep some visibility
+        logging.getLogger('httpx').setLevel(logging.WARNING)
+        logging.getLogger('urllib3').setLevel(logging.WARNING)
+        logging.getLogger('assemblyai').setLevel(logging.WARNING)
+    
+    # ✅ User feedback about current configuration (terminal output)
+    print(f"📝 STT Service Logging Configuration:")
+    print(f"   🎚️  Level: {log_level} ({logging.getLevelName(selected_level)})")
+    print(f"   📁  File: {log_file}")
+    print(f"   💾  Max size: {max_file_size // (1024*1024)} MB per file")
+    print(f"   🔄  Backup files: 5")
+    print(f"   📊  Performance mode: {'High' if selected_level >= logging.WARNING else 'Balanced'}")
+    
+    # ✅ Log the configuration to file as well
+    logger = logging.getLogger(__name__)
+    logger.info(
+        "Logging system configured",
+        extra={
+            "event_type": "logging_configured",
+            "log_level": log_level,
+            "log_file": log_file,
+            "max_file_size_mb": max_file_size // (1024*1024),
+            "backup_count": 5,
+            "performance_optimized": selected_level >= logging.WARNING
+        }
+    )
+
+
+# Setup file-only logging
+setup_file_only_logging()
 logger = logging.getLogger(__name__)
+
+# -------------------------------
+# ✅ Clean Terminal Output Functions
+# -------------------------------
+def terminal_info(message: str):
+    """Print user-facing information to terminal only"""
+    print(message)
+
+def terminal_listening():
+    """Show listening status to user"""
+    print("🎙️ Listening... Speak into your mic")
+
+def terminal_processing(text: str):
+    """Show real-time speech processing to user"""
+    status = "🗣️" if len(text.split()) > 2 else "💬"
+    print(f"{status} {text}")
+
+def terminal_final_capture(text: str):
+    """Show final captured speech to user"""
+    print(f"\n✅ You said: {text}")
 
 # -------------------------------
 # Helpers: attribute access + safe utter construction
@@ -77,12 +209,126 @@ def _get_best_utter(event: TurnEvent) -> str | None:
     return _get_attr(event, "transcript", None)
 
 # -------------------------------
-# ✅ Callback Handler Class - Testable and Reusable!
+# ✅ Production Telemetry and Metrics (Logs to File Only)
+# -------------------------------
+class STTTelemetry:
+    """Production-ready telemetry - all logging goes to file only"""
+    
+    def __init__(self):
+        self.session_start_time: Optional[float] = None
+        self.turn_count: int = 0
+        self.latency_history: List[float] = []
+        self.error_count: int = 0
+        self.total_sessions: int = 0
+        self.successful_sessions: int = 0
+        self.total_processing_time: float = 0.0
+        
+        # Quality metrics
+        self.word_count_history: List[int] = []
+        self.confidence_history: List[float] = []
+        
+    def start_session(self, session_id: str):
+        """Start tracking session - logs to file only"""
+        self.session_start_time = time.time()
+        self.turn_count = 0
+        self.total_sessions += 1
+        
+        logger.info(
+            "STT session telemetry started",
+            extra={
+                "event_type": "telemetry_session_start",
+                "session_id": session_id,
+                "total_sessions": self.total_sessions,
+                "timestamp": datetime.utcnow().isoformat(),
+                "component": "stt_telemetry"
+            }
+        )
+    
+    def track_turn(self, utterance: str, is_final: bool, confidence: float = None):
+        """Track turn metrics - logs to file only"""
+        self.turn_count += 1
+        turn_latency = time.time() - self.session_start_time if self.session_start_time else 0
+        word_count = len(utterance.split()) if utterance else 0
+        
+        # Track quality metrics
+        if word_count > 0:
+            self.word_count_history.append(word_count)
+        if confidence is not None:
+            self.confidence_history.append(confidence)
+        
+        logger.info(
+            "Turn metrics tracked",
+            extra={
+                "event_type": "telemetry_turn",
+                "turn_number": self.turn_count,
+                "utterance_length": len(utterance),
+                "word_count": word_count,
+                "is_final": is_final,
+                "turn_latency_ms": round(turn_latency * 1000, 2),
+                "confidence_score": confidence,
+                "avg_word_length": round(sum(len(word) for word in utterance.split()) / word_count, 2) if word_count > 0 else 0
+            }
+        )
+        
+        if is_final:
+            self.latency_history.append(turn_latency)
+    
+    def track_completion(self, final_result: str = None, success: bool = True):
+        """Track completion - logs to file only"""
+        if success:
+            self.successful_sessions += 1
+        
+        total_time = time.time() - self.session_start_time if self.session_start_time else 0
+        self.total_processing_time += total_time
+        
+        # Calculate metrics
+        success_rate = self.successful_sessions / self.total_sessions if self.total_sessions > 0 else 0
+        avg_latency = sum(self.latency_history) / len(self.latency_history) if self.latency_history else 0
+        avg_session_time = self.total_processing_time / self.total_sessions if self.total_sessions > 0 else 0
+        avg_words_per_session = sum(self.word_count_history) / len(self.word_count_history) if self.word_count_history else 0
+        avg_confidence = sum(self.confidence_history) / len(self.confidence_history) if self.confidence_history else 0
+        
+        logger.info(
+            "STT session telemetry completed",
+            extra={
+                "event_type": "telemetry_session_complete",
+                "session_duration_ms": round(total_time * 1000, 2),
+                "total_turns": self.turn_count,
+                "success": success,
+                "success_rate": round(success_rate, 3),
+                "avg_latency_ms": round(avg_latency * 1000, 2),
+                "avg_session_time_ms": round(avg_session_time * 1000, 2),
+                "final_result_length": len(final_result) if final_result else 0,
+                "final_word_count": len(final_result.split()) if final_result else 0,
+                "avg_words_per_session": round(avg_words_per_session, 1),
+                "avg_confidence": round(avg_confidence, 3),
+                "total_processed_sessions": self.total_sessions
+            }
+        )
+    
+    def track_error(self, error_type: str, error_message: str, session_id: str = None):
+        """Track errors - logs to file only"""
+        self.error_count += 1
+        
+        logger.error(
+            "STT error tracked in telemetry",
+            extra={
+                "event_type": "telemetry_error",
+                "session_id": session_id,
+                "error_type": error_type,
+                "error_message": error_message,
+                "total_errors": self.error_count,
+                "error_rate": round(self.error_count / self.total_sessions, 3) if self.total_sessions > 0 else 0,
+                "session_duration_before_error": round((time.time() - self.session_start_time) * 1000, 2) if self.session_start_time else 0
+            }
+        )
+
+# -------------------------------
+# ✅ Clean Callback Handler (File Logging + Clean Terminal)
 # -------------------------------
 class STTCallbackHandler:
     """
-    Clean, testable callback handler for STT events
-    Replaces nested functions with proper class structure for better testing and reusability
+    Callback handler with file logging and clean terminal output for users
     """
     
     def __init__(self, loop: asyncio.AbstractEventLoop):
@@ -94,10 +340,14 @@ class STTCallbackHandler:
         self.completion_event = asyncio.Event()
         self.error_event = asyncio.Event()
         self.error_occurred = False
+        self.session_id = None
         
         # Queues for async communication
         self.partial_queue = asyncio.Queue()
         self.final_queue = asyncio.Queue()
+        
+        # ✅ Telemetry integration (logs to file)
+        self.telemetry = STTTelemetry()
         
         # External callbacks (optional)
         self.on_partial_callback: Optional[Callable[[str], None]] = None
@@ -105,90 +355,170 @@ class STTCallbackHandler:
         self.on_session_start_callback: Optional[Callable[[str], None]] = None
     
     def on_begin(self, client, event: BeginEvent):
-        """Handle session start - easy to test!"""
+        """Handle session start - file logging + clean terminal"""
         session_id = _get_attr(event, "id", "unknown")
-        logger.info(f"🔹 STT session started: {session_id}")
-        print("🎙️ Listening... Speak into your mic")
+        self.session_id = session_id
+        
+        # ✅ File logging (structured)
+        logger.info(
+            "STT session started",
+            extra={
+                "event_type": "session_start", 
+                "session_id": session_id,
+                "timestamp": datetime.utcnow().isoformat(),
+                "component": "stt_callback_handler"
+            }
+        )
+        
+        # ✅ Clean terminal output for user
+        terminal_listening()
+        
+        # ✅ Telemetry (logs to file)
+        self.telemetry.start_session(session_id)
         
         if self.on_session_start_callback:
             try:
                 self.on_session_start_callback(session_id)
             except Exception as e:
-                logger.error(f"Error in session start callback: {e}")
+                logger.error(
+                    "Session start callback error",
+                    extra={
+                        "event_type": "callback_error",
+                        "session_id": session_id,
+                        "callback_type": "session_start",
+                        "error": str(e)
+                    },
+                    exc_info=True
+                )
     
     def on_turn(self, client, event: TurnEvent):
-        """Handle turn events - easy to test!"""
+        """Handle turns - file logging + clean terminal output"""
         utter = _get_best_utter(event)
         end_of_turn = _get_attr(event, "end_of_turn", False)
+        confidence = _get_attr(event, "confidence", None)
+        is_formatted = _get_attr(event, "turn_is_formatted", False)
 
         if not utter:
             return
 
-        # Print live feedback (simplified)
-        status = "end_of_turn=True" if end_of_turn else "end_of_turn=False"
-        print(f"🗣️ {utter} ({status})")
+        # ✅ File logging (comprehensive)
+        logger.info(
+            "Turn processed with detailed metrics",
+            extra={
+                "event_type": "turn_processed",
+                "session_id": self.session_id,
+                "utterance_preview": utter[:50] + "..." if len(utter) > 50 else utter,
+                "utterance_length": len(utter),
+                "word_count": len(utter.split()),
+                "is_final": end_of_turn,
+                "is_formatted": is_formatted,
+                "confidence": confidence,
+                "turn_number": self.telemetry.turn_count + 1,
+                "has_punctuation": any(char in utter for char in ".,!?;:"),
+                "processing_timestamp": time.time()
+            }
+        )
+
+        # ✅ Clean terminal output for user (real-time feedback)
+        terminal_processing(utter)
+
+        # ✅ Telemetry (logs to file)
+        self.telemetry.track_turn(utter, end_of_turn, confidence)
 
         # Handle partial results (non-blocking)
         if not end_of_turn:
             self.loop.call_soon_threadsafe(
                 lambda: asyncio.create_task(self.partial_queue.put(utter))
             )
-            # External callback for partial
             if self.on_partial_callback:
                 try:
                     self.on_partial_callback(utter)
                 except Exception as e:
-                    logger.error(f"Error in partial callback: {e}")
+                    logger.error(
+                        "Partial callback error",
+                        extra={
+                            "event_type": "callback_error",
+                            "session_id": self.session_id,
+                            "callback_type": "partial",
+                            "error": str(e)
+                        },
+                        exc_info=True
+                    )
             return
 
-        # ✅ FAST: Use first end_of_turn result immediately - no waiting!
+        # ✅ Final result handling
         if end_of_turn:
+            # Show final result to user
+            terminal_final_capture(utter)
+            
             self.loop.call_soon_threadsafe(
                 lambda: asyncio.create_task(self.final_queue.put(utter))
             )
             self.loop.call_soon_threadsafe(self.completion_event.set)
     
     def on_terminated(self, client, event: TerminationEvent):
-        """Handle termination - easy to test!"""
-        logger.info("🔹 STT session terminated")
+        """Handle termination - file logging only"""
+        logger.info(
+            "STT session terminated",
+            extra={
+                "event_type": "session_terminated",
+                "session_id": self.session_id,
+                "total_turns": self.telemetry.turn_count,
+                "session_duration_ms": round((time.time() - self.telemetry.session_start_time) * 1000, 2) if self.telemetry.session_start_time else 0
+            }
+        )
         self.loop.call_soon_threadsafe(self.completion_event.set)
     
     def on_error(self, client, error: StreamingError):
-        """Handle errors - easy to test!"""
-        logger.error(f"STT error: {error}")
+        """Handle errors - file logging only"""
+        error_type = type(error).__name__
+        error_message = str(error)
+        
+        logger.error(
+            "STT streaming error occurred",
+            extra={
+                "event_type": "streaming_error",
+                "session_id": self.session_id,
+                "error_type": error_type,
+                "error_message": error_message,
+                "turn_count": self.telemetry.turn_count,
+                "session_duration_ms": round((time.time() - self.telemetry.session_start_time) * 1000, 2) if self.telemetry.session_start_time else 0
+            },
+            exc_info=True
+        )
+        
+        # ✅ Telemetry (logs to file)
+        self.telemetry.track_error(error_type, error_message, self.session_id)
+        
         self.error_occurred = True
         self.loop.call_soon_threadsafe(self.error_event.set)
         self.loop.call_soon_threadsafe(self.completion_event.set)
     
     def reset(self):
-        """Reset handler for reuse - testable!"""
+        """Reset handler - logs to file only"""
+        logger.info(
+            "Handler reset for reuse",
+            extra={
+                "event_type": "handler_reset",
+                "previous_session_id": self.session_id
+            }
+        )
+        
         self.result = None
         self.error_occurred = False
+        self.session_id = None
         self.completion_event = asyncio.Event()
         self.error_event = asyncio.Event()
         self.partial_queue = asyncio.Queue()
         self.final_queue = asyncio.Queue()
-    
-    def get_state_info(self) -> dict:
-        """Get current state info - useful for debugging and testing"""
-        return {
-            "has_result": self.result is not None,
-            "is_completed": self.completion_event.is_set(),
-            "has_error": self.error_occurred,
-            "partial_queue_size": self.partial_queue.qsize(),
-            "final_queue_size": self.final_queue.qsize()
-        }
+        self.telemetry = STTTelemetry()
 
 # -------------------------------
-# ✅ Improved STT Service with Callback Handler Class
+# ✅ Streaming STT Service (File Logging Only)
 # -------------------------------
-class ImprovedAsyncSTTService:
+class StreamingSTTService:
     """
-    Improved async STT service using callback handler class pattern
-    - Clean, testable callback handling
-    - No 450ms delays (immediate responses)
-    - Simplified turn detection  
-    - Easy to unit test and maintain
+    Production streaming STT service - all detailed logs go to file only
     """
     
     def __init__(self, api_key: str, default_timeout: float = 30.0, vad_threshold: float = 0.5):
@@ -196,7 +526,7 @@ class ImprovedAsyncSTTService:
         self.default_timeout = default_timeout
         self.vad_threshold = vad_threshold
         
-        # External callback handlers (clean separation)
+        # External callbacks
         self.on_partial: Optional[Callable[[str], None]] = None
         self.on_final: Optional[Callable[[str], None]] = None
         self.on_session_start: Optional[Callable[[str], None]] = None
@@ -204,26 +534,50 @@ class ImprovedAsyncSTTService:
         # Audio configuration
         self.sample_rate = 16000
         
+        # Service-level telemetry (logs to file)
+        self.service_telemetry = STTTelemetry()
+        
+        logger.info(
+            "Streaming STT service initialized",
+            extra={
+                "event_type": "service_init",
+                "service_type": "streaming",
+                "default_timeout": default_timeout,
+                "vad_threshold": vad_threshold,
+                "sample_rate": self.sample_rate
+            }
+        )
+        
     async def capture_speech(self, timeout: float = None) -> str | None:
         """
-        ✅ IMPROVED: Using callback handler class - testable and clean!
-        Fast async capture with proper callback handling
+        Clean speech capture - detailed logs to file, clean terminal for user
         """
         if timeout is None:
             timeout = self.default_timeout
             
+        capture_start_time = time.time()
+        
         # Get current event loop
         loop = asyncio.get_running_loop()
         
-        # ✅ Create callback handler instance - testable and reusable!
+        # ✅ Create handler with file logging
         handler = STTCallbackHandler(loop)
         
-        # ✅ Set external callbacks from service configuration
+        # Set callbacks
         handler.on_partial_callback = self.on_partial
         handler.on_final_callback = self.on_final
         handler.on_session_start_callback = self.on_session_start
         
-        # Setup AssemblyAI streaming client
+        logger.info(
+            "Starting speech capture",
+            extra={
+                "event_type": "capture_start",
+                "timeout_seconds": timeout,
+                "capture_id": f"capture_{int(capture_start_time)}"
+            }
+        )
+        
+        # Setup client
         client = StreamingClient(
             StreamingClientOptions(
                 api_key=self.api_key,
@@ -232,250 +586,477 @@ class ImprovedAsyncSTTService:
             )
         )
         
-        # ✅ Register handler methods (clean, no nested functions!)
+        # Register callbacks
         client.on(StreamingEvents.Begin, handler.on_begin)
         client.on(StreamingEvents.Turn, handler.on_turn)
         client.on(StreamingEvents.Termination, handler.on_terminated) 
         client.on(StreamingEvents.Error, handler.on_error)
 
-        # Connect with format_turns=True (v3 API handles formatting!)
+        # Connect
         client.connect(
             StreamingParameters(
                 sample_rate=self.sample_rate,
-                format_turns=True,  # ✅ Trust v3 API formatting
+                format_turns=True,
                 speech_model="universal-streaming-english",
                 vad_threshold=self.vad_threshold
             )
         )
 
-        # ✅ Clean execution with handler-based callbacks
+        # Execute with clean error handling
         stream_task = None
         partial_task = None
         final_result = None
         
         try:
-            # Start microphone streaming with error handling
             async def run_microphone_stream():
-                """Async wrapper for AssemblyAI's MicrophoneStream"""
+                """Microphone stream with file logging"""
                 try:
                     mic_stream = aai.extras.MicrophoneStream(sample_rate=self.sample_rate)
-                    # Run in thread pool to avoid blocking
                     await asyncio.to_thread(client.stream, mic_stream)
                 except Exception as e:
-                    logger.error(f"Microphone stream error: {e}")
+                    logger.error(
+                        "Microphone stream error",
+                        extra={
+                            "event_type": "microphone_error",
+                            "error_type": type(e).__name__,
+                            "error_message": str(e),
+                            "session_id": handler.session_id
+                        },
+                        exc_info=True
+                    )
                     handler.loop.call_soon_threadsafe(handler.error_event.set)
                     handler.loop.call_soon_threadsafe(handler.completion_event.set)
             
-            # Start streaming and partial processing tasks
+            # Start tasks
             stream_task = asyncio.create_task(run_microphone_stream())
-            partial_task = asyncio.create_task(self._process_partial_results(handler.partial_queue))
+            partial_task = asyncio.create_task(self._process_partial_results(handler.partial_queue, handler.session_id))
             
-            # Wait for completion with timeout - immediate responses!
+            # Wait for completion
             try:
                 await asyncio.wait_for(handler.completion_event.wait(), timeout=timeout)
                 
-                # Get final result if available
+                # Get result
                 if not handler.final_queue.empty():
                     final_result = await handler.final_queue.get()
                     
-                # External callback for final result
+                # File logging for final result
+                logger.info(
+                    "Final result captured successfully",
+                    extra={
+                        "event_type": "final_result_captured",
+                        "session_id": handler.session_id,
+                        "result_length": len(final_result) if final_result else 0,
+                        "word_count": len(final_result.split()) if final_result else 0,
+                        "capture_duration_ms": round((time.time() - capture_start_time) * 1000, 2),
+                        "success": True
+                    }
+                )
+                    
+                # External callbacks
                 if final_result and self.on_final:
                     try:
                         self.on_final(final_result)
                     except Exception as e:
-                        logger.error(f"Error in final callback: {e}")
+                        logger.error(
+                            "Final callback execution error",
+                            extra={
+                                "event_type": "callback_error",
+                                "session_id": handler.session_id,
+                                "callback_type": "final",
+                                "error": str(e)
+                            },
+                            exc_info=True
+                        )
                         
             except asyncio.TimeoutError:
-                logger.info("STT timeout - no speech captured")
+                logger.warning(
+                    "STT capture timed out",
+                    extra={
+                        "event_type": "capture_timeout",
+                        "session_id": handler.session_id,
+                        "timeout_seconds": timeout,
+                        "turns_processed": handler.telemetry.turn_count
+                    }
+                )
                 
         except Exception as e:
-            logger.error(f"STT streaming error: {e}")
+            logger.error(
+                "STT capture failed with unexpected error",
+                extra={
+                    "event_type": "capture_failed",
+                    "session_id": handler.session_id,
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                    "capture_duration_ms": round((time.time() - capture_start_time) * 1000, 2)
+                },
+                exc_info=True
+            )
         finally:
-            # ✅ Clean resource cleanup - handler makes this easier to manage
+            # Telemetry completion (logs to file)
+            handler.telemetry.track_completion(
+                final_result=final_result,
+                success=final_result is not None and not handler.error_occurred
+            )
+            
+            # Clean resource cleanup (logs to file)
             try:
                 client.disconnect(terminate=True)
+                logger.info(
+                    "STT client disconnected",
+                    extra={
+                        "event_type": "client_disconnect",
+                        "session_id": handler.session_id
+                    }
+                )
             except Exception as e:
-                logger.error(f"Error disconnecting: {e}")
+                logger.error(
+                    "Error disconnecting STT client",
+                    extra={
+                        "event_type": "disconnect_error",
+                        "session_id": handler.session_id,
+                        "error": str(e)
+                    }
+                )
             
-            # Cancel tasks cleanly
-            if stream_task and not stream_task.done():
-                stream_task.cancel()
-                try:
-                    await stream_task
-                except asyncio.CancelledError:
-                    pass
-                    
-            if partial_task and not partial_task.done():
-                partial_task.cancel()
-                try:
-                    await partial_task
-                except asyncio.CancelledError:
-                    pass
-            
-            # Log final handler state for debugging
-            logger.debug(f"Handler final state: {handler.get_state_info()}")
+            # Cancel tasks
+            for task_name, task in [("stream", stream_task), ("partial", partial_task)]:
+                if task and not task.done():
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        logger.info(
+                            f"Task cancelled successfully",
+                            extra={
+                                "event_type": "task_cancelled",
+                                "task_type": task_name,
+                                "session_id": handler.session_id
+                            }
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"Error cancelling {task_name} task",
+                            extra={
+                                "event_type": "task_cancel_error",
+                                "task_type": task_name,
+                                "session_id": handler.session_id,
+                                "error": str(e)
+                            }
+                        )
 
         return final_result
     
-    async def _process_partial_results(self, partial_queue: asyncio.Queue):
-        """Process partial results as they arrive - easy to test with handler pattern"""
+    async def _process_partial_results(self, partial_queue: asyncio.Queue, session_id: str = None):
+        """Process partials - logs to file only"""
+        logger.info(
+            "Started partial results processor",
+            extra={
+                "event_type": "partial_processor_start",
+                "session_id": session_id
+            }
+        )
+        
+        partial_count = 0
         try:
             while True:
                 try:
                     partial = await asyncio.wait_for(partial_queue.get(), timeout=0.1)
-                    # Could do something with partial results here
-                    # e.g., update UI in real-time, trigger live transcription
+                    partial_count += 1
+                    
+                    logger.debug(
+                        "Partial result processed",
+                        extra={
+                            "event_type": "partial_processed",
+                            "session_id": session_id,
+                            "partial_number": partial_count,
+                            "partial_length": len(partial)
+                        }
+                    )
                 except asyncio.TimeoutError:
                     continue
         except asyncio.CancelledError:
-            pass
-    
-    def configure_callbacks(self, 
-                          on_partial: Optional[Callable[[str], None]] = None,
-                          on_final: Optional[Callable[[str], None]] = None,
-                          on_session_start: Optional[Callable[[str], None]] = None):
-        """Configure external callbacks - easier with class-based approach"""
-        if on_partial:
-            self.on_partial = on_partial
-        if on_final:
-            self.on_final = on_final  
-        if on_session_start:
-            self.on_session_start = on_session_start
+            logger.info(
+                "Partial results processor cancelled",
+                extra={
+                    "event_type": "partial_processor_cancelled",
+                    "session_id": session_id,
+                    "partials_processed": partial_count
+                }
+            )
 
 # -------------------------------
-# Service instance with improved callback handler pattern
+# ✅ Batch Service (File Logging Only)
 # -------------------------------
-stt_service_instance = ImprovedAsyncSTTService(
+class BatchSTTService:
+    """Batch processing with file-only logging"""
+    
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.telemetry = STTTelemetry()
+        
+        logger.info(
+            "Batch STT service initialized",
+            extra={
+                "event_type": "service_init",
+                "service_type": "batch"
+            }
+        )
+    
+    def transcribe_file(self, file_path: str) -> str:
+        """File transcription with comprehensive logging to file"""
+        start_time = time.time()
+        
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"Audio file not found: {file_path}")
+        
+        file_size = os.path.getsize(file_path)
+        file_ext = os.path.splitext(file_path)[1].lower()
+        
+        logger.info(
+            "Starting batch file transcription",
+            extra={
+                "event_type": "batch_transcribe_start",
+                "file_path": file_path,
+                "file_size_bytes": file_size,
+                "file_size_mb": round(file_size / (1024 * 1024), 2),
+                "file_extension": file_ext,
+                "transcription_id": f"batch_{int(start_time)}"
+            }
+        )
+        
+        try:
+            transcriber = aai.Transcriber(api_key=self.api_key)
+            transcript = transcriber.transcribe(file_path)
+            
+            if transcript.status == aai.TranscriptStatus.error:
+                raise Exception(f"Transcription failed: {transcript.error}")
+            
+            duration_ms = (time.time() - start_time) * 1000
+            result_text = transcript.text or ""
+            word_count = len(result_text.split()) if result_text else 0
+            
+            logger.info(
+                "Batch transcription completed successfully",
+                extra={
+                    "event_type": "batch_transcribe_complete",
+                    "file_path": file_path,
+                    "duration_ms": round(duration_ms, 2),
+                    "transcript_length": len(result_text),
+                    "word_count": word_count,
+                    "confidence": getattr(transcript, 'confidence', None),
+                    "processing_speed_ratio": round(file_size / (1024 * duration_ms), 3),
+                    "success": True
+                }
+            )
+            
+            return result_text
+            
+        except Exception as e:
+            duration_ms = (time.time() - start_time) * 1000
+            
+            logger.error(
+                "Batch transcription failed",
+                extra={
+                    "event_type": "batch_transcribe_error",
+                    "file_path": file_path,
+                    "duration_ms": round(duration_ms, 2),
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                    "file_size_mb": round(file_size / (1024 * 1024), 2)
+                },
+                exc_info=True
+            )
+            raise
+
+# -------------------------------
+# ✅ Service Instances
+# -------------------------------
+streaming_stt_service = StreamingSTTService(
     api_key=API_KEY,
     default_timeout=DEFAULT_STT_TIMEOUT,
     vad_threshold=VAD_THRESHOLD
 )
 
-# Setup external callbacks for better user experience - now cleaner!
+batch_stt_service = BatchSTTService(api_key=API_KEY)
+
+# ✅ Clean callback functions (no terminal output)
 def on_partial_speech(text: str):
-    """Handle partial speech results - easy to test as standalone function"""
-    # Could update UI or provide live feedback
-    pass
+    """Handle partials - file logging only"""
+    logger.debug(
+        "Partial speech callback triggered",
+        extra={
+            "event_type": "partial_callback",
+            "text_length": len(text),
+            "text_preview": text[:30] + "..." if len(text) > 30 else text
+        }
+    )
 
 def on_final_speech(text: str):
-    """Handle final speech results - easy to test as standalone function"""
-    print(f"\n🟢 Final utterance captured: {text}")
+    """Handle finals - file logging only"""
+    logger.info(
+        "Final speech callback triggered",
+        extra={
+            "event_type": "final_callback", 
+            "final_text": text,
+            "text_length": len(text),
+            "word_count": len(text.split())
+        }
+    )
 
 def on_session_start(session_id: str):
-    """Handle session start - easy to test as standalone function"""
-    logger.info(f"Voice session started: {session_id}")
+    """Handle session start - file logging only"""
+    logger.info(
+        "Session start callback triggered",
+        extra={
+            "event_type": "session_start_callback",
+            "session_id": session_id
+        }
+    )
 
-# ✅ Configure callbacks using clean API
-stt_service_instance.configure_callbacks(
-    on_partial=on_partial_speech,
-    on_final=on_final_speech,
-    on_session_start=on_session_start
-)
+# Configure callbacks
+streaming_stt_service.on_partial = on_partial_speech
+streaming_stt_service.on_final = on_final_speech
+streaming_stt_service.on_session_start = on_session_start
 
 # -------------------------------
-# Fast async wrapper for LangGraph - now with better error handling
+# ✅ LangGraph Integration (File Logging Only)
 # -------------------------------
 async def stt_service(state: VoiceState) -> dict:
     """
-    Improved async wrapper with callback handler class - Fast, testable, reliable!
+    Production STT wrapper - logs to file, clean terminal output
     """
+    request_id = f"request_{int(time.time())}"
+    
+    logger.info(
+        "STT service request started",
+        extra={
+            "event_type": "stt_request_start",
+            "request_id": request_id,
+            "state_has_messages": bool(getattr(state, "messages", None))
+        }
+    )
+    
     try:
-        # ✅ Clean async call with improved callback handling
-        utter_final = await stt_service_instance.capture_speech()
+        # Clean async call
+        utter_final = await streaming_stt_service.capture_speech()
         
         if not utter_final:
-            # ✅ Explicit timeout error state
+            logger.warning(
+                "No speech captured - timeout occurred",
+                extra={
+                    "event_type": "stt_timeout",
+                    "request_id": request_id,
+                    "retry_count": state.get("retry_count", 0)
+                }
+            )
+            
             return {
                 "status": "error",
                 "error": {
                     "type": "timeout",
                     "message": "No speech detected. Please try again.",
                     "recoverable": True,
-                    "retry_count": state.get("retry_count", 0)
+                    "retry_count": state.get("retry_count", 0),
+                    "request_id": request_id
                 }
             }
 
-        # ✅ Success state - immediate response!
+        # Success
         current_messages = getattr(state, "messages", []) or []
         updated_messages = current_messages + [HumanMessage(content=utter_final)]
+        
+        logger.info(
+            "STT service request completed successfully",
+            extra={
+                "event_type": "stt_request_success",
+                "request_id": request_id,
+                "final_utterance": utter_final,
+                "utterance_length": len(utter_final),
+                "word_count": len(utter_final.split()),
+                "total_messages": len(updated_messages)
+            }
+        )
         
         return {
             "messages": updated_messages,
             "status": "success",
-            "retry_count": 0  # Reset retry count on success
+            "retry_count": 0,
+            "request_id": request_id
         }
         
     except ConnectionError as e:
-        logger.error(f"STT Connection error: {e}")
+        logger.error(
+            "STT connection error occurred",
+            extra={
+                "event_type": "stt_connection_error",
+                "request_id": request_id,
+                "error_message": str(e)
+            },
+            exc_info=True
+        )
         return {
             "status": "error",
             "error": {
                 "type": "connection",
                 "message": "Internet connection lost. Switching to offline mode.",
                 "recoverable": True,
-                "original_error": str(e)
+                "original_error": str(e),
+                "request_id": request_id
             }
         }
         
     except PermissionError as e:
-        logger.error(f"STT Permission error: {e}")
+        logger.error(
+            "STT permission error occurred",
+            extra={
+                "event_type": "stt_permission_error",
+                "request_id": request_id,
+                "error_message": str(e)
+            },
+            exc_info=True
+        )
         return {
             "status": "error", 
             "error": {
                 "type": "permission",
                 "message": "Microphone access denied. Please check your settings.",
                 "recoverable": False,
-                "original_error": str(e)
+                "original_error": str(e),
+                "request_id": request_id
             }
         }
         
     except Exception as e:
-        logger.exception(f"STT Unknown error: {e}")
+        logger.error(
+            "STT service unexpected error",
+            extra={
+                "event_type": "stt_unexpected_error",
+                "request_id": request_id,
+                "error_type": type(e).__name__,
+                "error_message": str(e)
+            },
+            exc_info=True
+        )
         return {
             "status": "error",
             "error": {
                 "type": "unknown", 
                 "message": f"Unexpected error: {str(e)}",
                 "recoverable": False,
-                "original_error": str(e)
+                "original_error": str(e),
+                "request_id": request_id
             }
         }
 
-# -------------------------------
-# Enhanced version for future extensibility
-# -------------------------------
-class TestableSTTService(ImprovedAsyncSTTService):
-    """
-    Enhanced version that makes testing even easier
-    Demonstrates the power of the callback handler class pattern
-    """
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.last_handler_state = None
-        self.capture_history = []
-    
-    async def capture_speech_with_testing_support(self, timeout: float = None, 
-                                                 mock_handler: STTCallbackHandler = None) -> str | None:
-        """
-        Version that supports dependency injection for testing
-        Shows how callback handler class makes testing easier
-        """
-        if mock_handler:
-            # Use injected handler for testing
-            handler = mock_handler
-            # ... rest of capture logic with injected handler
-        else:
-            # Use normal flow
-            return await self.capture_speech(timeout)
-    
-    def get_capture_history(self) -> list:
-        """Get history of captures for testing analysis"""
-        return self.capture_history.copy()
-
-# Example usage for enhanced testing
-enhanced_stt_service = TestableSTTService(
-    api_key=API_KEY,
-    default_timeout=DEFAULT_STT_TIMEOUT, 
-    vad_threshold=VAD_THRESHOLD
+# ✅ Log initialization completion to file
+logger.info(
+    "STT service module initialized successfully",
+    extra={
+        "event_type": "module_init_complete",
+        "streaming_service": "ready",
+        "batch_service": "ready", 
+        "structured_logging": "file_only",
+        "telemetry": "enabled",
+        "log_file": "stt_service.log"
+    }
 )
