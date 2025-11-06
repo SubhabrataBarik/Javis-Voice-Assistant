@@ -36,36 +36,28 @@ if not API_KEY:
     raise ValueError("❌ Missing AssemblyAI API key. Check your .env file.")
 
 # -------------------------------
-# ✅ File-Only Structured Logging Configuration with Environment Control
+# ✅ File-Only Structured Logging Configuration
 # -------------------------------
 def setup_file_only_logging():
-    """
-    Enhanced logging configuration with environment variable control
-    Supports log level control, file rotation, and performance optimization
-    """
+    """Enhanced logging configuration with environment variable control"""
     
-    # ✅ Get configuration from environment variables
+    # Get configuration from environment variables
     log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
     log_file = os.getenv('LOG_FILE', 'stt_service.log')
-    max_file_size = int(os.getenv('LOG_MAX_SIZE_MB', '10')) * 1024 * 1024  # Convert to bytes
+    max_file_size = int(os.getenv('LOG_MAX_SIZE_MB', '10')) * 1024 * 1024
     
-    # ✅ Log level mapping
     level_mapping = {
-        'DEBUG': logging.DEBUG,      # Most verbose - everything
-        'INFO': logging.INFO,        # Default - balanced
-        'WARNING': logging.WARNING,  # Less logs - warnings and above
-        'ERROR': logging.ERROR,      # Only errors and critical
-        'CRITICAL': logging.CRITICAL # Almost nothing - only critical
+        'DEBUG': logging.DEBUG,
+        'INFO': logging.INFO,
+        'WARNING': logging.WARNING,
+        'ERROR': logging.ERROR,
+        'CRITICAL': logging.CRITICAL
     }
     
     class StructuredFormatter(logging.Formatter):
-        """Enhanced formatter with better performance for different log levels"""
-        
         def format(self, record):
-            # Base format
             base_format = '%(asctime)s | %(name)s | %(levelname)s | %(message)s'
             
-            # Add extra fields (but optimize for performance at higher log levels)
             if hasattr(record, '__dict__') and record.levelno <= logging.INFO:
                 extras = []
                 for key, value in record.__dict__.items():
@@ -73,7 +65,6 @@ def setup_file_only_logging():
                                  'pathname', 'filename', 'module', 'lineno', 'funcName',
                                  'created', 'msecs', 'relativeCreated', 'thread', 'threadName',
                                  'processName', 'process', 'getMessage', 'asctime']:
-                        # Truncate long values for performance
                         str_value = str(value)
                         if len(str_value) > 100:
                             str_value = str_value[:97] + "..."
@@ -85,56 +76,47 @@ def setup_file_only_logging():
             formatter = logging.Formatter(base_format)
             return formatter.format(record)
     
-    # ✅ Import rotating file handler for better file management
     from logging.handlers import RotatingFileHandler
     
-    # ✅ Create rotating file handler to prevent huge log files
     file_handler = RotatingFileHandler(
         log_file, 
         maxBytes=max_file_size, 
-        backupCount=5,  # Keep 5 old log files (stt_service.log.1, .2, etc.)
+        backupCount=5,
         encoding='utf-8'
     )
     file_handler.setFormatter(StructuredFormatter())
     
-    # ✅ Configure root logger with environment-specified level
     root_logger = logging.getLogger()
     selected_level = level_mapping.get(log_level, logging.INFO)
     root_logger.setLevel(selected_level)
     
-    # Remove any existing handlers to avoid duplicates
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
     
-    # Add only our file handler
     root_logger.addHandler(file_handler)
     
-    # ✅ Performance optimization: Silence noisy third-party loggers based on level
     if selected_level >= logging.WARNING:
-        # At WARNING level and above, silence noisy libraries completely
         logging.getLogger('httpx').setLevel(logging.ERROR)
         logging.getLogger('urllib3').setLevel(logging.ERROR)
         logging.getLogger('assemblyai').setLevel(logging.ERROR)
         logging.getLogger('asyncio').setLevel(logging.ERROR)
     elif selected_level >= logging.INFO:
-        # At INFO level, reduce noise but keep some visibility
         logging.getLogger('httpx').setLevel(logging.WARNING)
         logging.getLogger('urllib3').setLevel(logging.WARNING)
         logging.getLogger('assemblyai').setLevel(logging.WARNING)
     
-    # ✅ User feedback about current configuration (terminal output)
     print(f"📝 STT Service Logging Configuration:")
     print(f"   🎚️  Level: {log_level} ({logging.getLevelName(selected_level)})")
     print(f"   📁  File: {log_file}")
     print(f"   💾  Max size: {max_file_size // (1024*1024)} MB per file")
     print(f"   🔄  Backup files: 5")
     print(f"   📊  Performance mode: {'High' if selected_level >= logging.WARNING else 'Balanced'}")
-    print(f"   🔗  Connection pooling: Enabled")
+    print(f"   🔗  Connection: Fresh per conversation (Fixed)")
+    print(f"   📊  Standard streaming: Reliable")
     
-    # ✅ Log the configuration to file as well
     logger = logging.getLogger(__name__)
     logger.info(
-        "Logging system configured",
+        "Logging system configured with fixed connection management",
         extra={
             "event_type": "logging_configured",
             "log_level": log_level,
@@ -142,11 +124,11 @@ def setup_file_only_logging():
             "max_file_size_mb": max_file_size // (1024*1024),
             "backup_count": 5,
             "performance_optimized": selected_level >= logging.WARNING,
-            "connection_pooling": True
+            "connection_pooling": False,  # ✅ CHANGED: Disabled to fix rate issues
+            "streaming_mode": "standard_reliable"
         }
     )
 
-# Setup file-only logging
 setup_file_only_logging()
 logger = logging.getLogger(__name__)
 
@@ -154,20 +136,16 @@ logger = logging.getLogger(__name__)
 # ✅ Clean Terminal Output Functions
 # -------------------------------
 def terminal_info(message: str):
-    """Print user-facing information to terminal only"""
     print(message)
 
 def terminal_listening():
-    """Show listening status to user"""
     print("🎙️ Listening... Speak into your mic")
 
 def terminal_processing(text: str):
-    """Show real-time speech processing to user"""
     status = "🗣️" if len(text.split()) > 2 else "💬"
     print(f"{status} {text}")
 
 def terminal_final_capture(text: str):
-    """Show final captured speech to user"""
     print(f"\n✅ You said: {text}")
 
 # -------------------------------
@@ -210,11 +188,9 @@ def _get_best_utter(event: TurnEvent) -> str | None:
     return _get_attr(event, "transcript", None)
 
 # -------------------------------
-# ✅ Production Telemetry and Metrics (Logs to File Only)
+# ✅ Production Telemetry and Metrics
 # -------------------------------
 class STTTelemetry:
-    """Production-ready telemetry - all logging goes to file only"""
-    
     def __init__(self):
         self.session_start_time: Optional[float] = None
         self.turn_count: int = 0
@@ -223,13 +199,10 @@ class STTTelemetry:
         self.total_sessions: int = 0
         self.successful_sessions: int = 0
         self.total_processing_time: float = 0.0
-        
-        # Quality metrics
         self.word_count_history: List[int] = []
         self.confidence_history: List[float] = []
         
     def start_session(self, session_id: str):
-        """Start tracking session - logs to file only"""
         self.session_start_time = time.time()
         self.turn_count = 0
         self.total_sessions += 1
@@ -246,12 +219,10 @@ class STTTelemetry:
         )
     
     def track_turn(self, utterance: str, is_final: bool, confidence: float = None):
-        """Track turn metrics - logs to file only"""
         self.turn_count += 1
         turn_latency = time.time() - self.session_start_time if self.session_start_time else 0
         word_count = len(utterance.split()) if utterance else 0
         
-        # Track quality metrics
         if word_count > 0:
             self.word_count_history.append(word_count)
         if confidence is not None:
@@ -266,8 +237,7 @@ class STTTelemetry:
                 "word_count": word_count,
                 "is_final": is_final,
                 "turn_latency_ms": round(turn_latency * 1000, 2),
-                "confidence_score": confidence,
-                "avg_word_length": round(sum(len(word) for word in utterance.split()) / word_count, 2) if word_count > 0 else 0
+                "confidence_score": confidence
             }
         )
         
@@ -275,19 +245,14 @@ class STTTelemetry:
             self.latency_history.append(turn_latency)
     
     def track_completion(self, final_result: str = None, success: bool = True):
-        """Track completion - logs to file only"""
         if success:
             self.successful_sessions += 1
         
         total_time = time.time() - self.session_start_time if self.session_start_time else 0
         self.total_processing_time += total_time
         
-        # Calculate metrics
         success_rate = self.successful_sessions / self.total_sessions if self.total_sessions > 0 else 0
         avg_latency = sum(self.latency_history) / len(self.latency_history) if self.latency_history else 0
-        avg_session_time = self.total_processing_time / self.total_sessions if self.total_sessions > 0 else 0
-        avg_words_per_session = sum(self.word_count_history) / len(self.word_count_history) if self.word_count_history else 0
-        avg_confidence = sum(self.confidence_history) / len(self.confidence_history) if self.confidence_history else 0
         
         logger.info(
             "STT session telemetry completed",
@@ -298,17 +263,11 @@ class STTTelemetry:
                 "success": success,
                 "success_rate": round(success_rate, 3),
                 "avg_latency_ms": round(avg_latency * 1000, 2),
-                "avg_session_time_ms": round(avg_session_time * 1000, 2),
-                "final_result_length": len(final_result) if final_result else 0,
-                "final_word_count": len(final_result.split()) if final_result else 0,
-                "avg_words_per_session": round(avg_words_per_session, 1),
-                "avg_confidence": round(avg_confidence, 3),
-                "total_processed_sessions": self.total_sessions
+                "final_result_length": len(final_result) if final_result else 0
             }
         )
     
     def track_error(self, error_type: str, error_message: str, session_id: str = None):
-        """Track errors - logs to file only"""
         self.error_count += 1
         
         logger.error(
@@ -319,159 +278,117 @@ class STTTelemetry:
                 "error_type": error_type,
                 "error_message": error_message,
                 "total_errors": self.error_count,
-                "error_rate": round(self.error_count / self.total_sessions, 3) if self.total_sessions > 0 else 0,
-                "session_duration_before_error": round((time.time() - self.session_start_time) * 1000, 2) if self.session_start_time else 0
+                "error_rate": round(self.error_count / self.total_sessions, 3) if self.total_sessions > 0 else 0
             }
         )
 
 # -------------------------------
-# ✅ Clean Callback Handler (File Logging + Clean Terminal)
+# ✅ Fixed Callback Handler (Safe Event Loop Handling)
 # -------------------------------
 class STTCallbackHandler:
-    """
-    Callback handler with file logging and clean terminal output for users
-    """
-    
     def __init__(self, loop: asyncio.AbstractEventLoop):
-        # Event loop for thread-safe signaling
         self.loop = loop
-        
-        # State management
         self.result = None
         self.completion_event = asyncio.Event()
         self.error_event = asyncio.Event()
         self.error_occurred = False
         self.session_id = None
-        
-        # Queues for async communication
         self.partial_queue = asyncio.Queue()
         self.final_queue = asyncio.Queue()
-        
-        # ✅ Telemetry integration (logs to file)
         self.telemetry = STTTelemetry()
+        self.is_loop_closed = False  # ✅ ADDED: Track loop state to prevent errors
         
-        # External callbacks (optional)
         self.on_partial_callback: Optional[Callable[[str], None]] = None
         self.on_final_callback: Optional[Callable[[str], None]] = None
         self.on_session_start_callback: Optional[Callable[[str], None]] = None
     
+    def _safe_loop_call(self, func):
+        """✅ ADDED: Safely call loop functions, handling closed loop"""
+        try:
+            if not self.is_loop_closed and not self.loop.is_closed():
+                self.loop.call_soon_threadsafe(func)
+            else:
+                logger.debug("Skipping loop call - event loop is closed")
+        except RuntimeError as e:
+            if "Event loop is closed" in str(e):
+                self.is_loop_closed = True
+                logger.debug("Event loop closed during callback")
+            else:
+                raise
+    
     def on_begin(self, client, event: BeginEvent):
-        """Handle session start - file logging + clean terminal"""
         session_id = _get_attr(event, "id", "unknown")
         self.session_id = session_id
         
-        # ✅ File logging (structured)
         logger.info(
             "STT session started",
             extra={
                 "event_type": "session_start", 
                 "session_id": session_id,
-                "timestamp": datetime.utcnow().isoformat(),
-                "component": "stt_callback_handler"
+                "timestamp": datetime.utcnow().isoformat()
             }
         )
         
-        # ✅ Clean terminal output for user
-        terminal_listening()
-        
-        # ✅ Telemetry (logs to file)
         self.telemetry.start_session(session_id)
         
         if self.on_session_start_callback:
             try:
                 self.on_session_start_callback(session_id)
             except Exception as e:
-                logger.error(
-                    "Session start callback error",
-                    extra={
-                        "event_type": "callback_error",
-                        "session_id": session_id,
-                        "callback_type": "session_start",
-                        "error": str(e)
-                    },
-                    exc_info=True
-                )
+                logger.error(f"Session start callback error: {e}")
     
     def on_turn(self, client, event: TurnEvent):
-        """Handle turns - file logging + clean terminal output"""
         utter = _get_best_utter(event)
         end_of_turn = _get_attr(event, "end_of_turn", False)
         confidence = _get_attr(event, "confidence", None)
-        is_formatted = _get_attr(event, "turn_is_formatted", False)
 
         if not utter:
             return
 
-        # ✅ File logging (comprehensive)
         logger.info(
-            "Turn processed with detailed metrics",
+            "Turn processed",
             extra={
                 "event_type": "turn_processed",
                 "session_id": self.session_id,
-                "utterance_preview": utter[:50] + "..." if len(utter) > 50 else utter,
                 "utterance_length": len(utter),
                 "word_count": len(utter.split()),
                 "is_final": end_of_turn,
-                "is_formatted": is_formatted,
-                "confidence": confidence,
-                "turn_number": self.telemetry.turn_count + 1,
-                "has_punctuation": any(char in utter for char in ".,!?;:"),
-                "processing_timestamp": time.time()
+                "confidence": confidence
             }
         )
 
-        # ✅ Clean terminal output for user (real-time feedback)
         terminal_processing(utter)
-
-        # ✅ Telemetry (logs to file)
         self.telemetry.track_turn(utter, end_of_turn, confidence)
 
-        # Handle partial results (non-blocking)
         if not end_of_turn:
-            self.loop.call_soon_threadsafe(
-                lambda: asyncio.create_task(self.partial_queue.put(utter))
-            )
+            # ✅ CHANGED: Use safe loop call
+            self._safe_loop_call(lambda: asyncio.create_task(self.partial_queue.put(utter)))
             if self.on_partial_callback:
                 try:
                     self.on_partial_callback(utter)
                 except Exception as e:
-                    logger.error(
-                        "Partial callback error",
-                        extra={
-                            "event_type": "callback_error",
-                            "session_id": self.session_id,
-                            "callback_type": "partial",
-                            "error": str(e)
-                        },
-                        exc_info=True
-                    )
+                    logger.error(f"Partial callback error: {e}")
             return
 
-        # ✅ Final result handling
         if end_of_turn:
-            # Show final result to user
             terminal_final_capture(utter)
-            
-            self.loop.call_soon_threadsafe(
-                lambda: asyncio.create_task(self.final_queue.put(utter))
-            )
-            self.loop.call_soon_threadsafe(self.completion_event.set)
+            # ✅ CHANGED: Use safe loop calls
+            self._safe_loop_call(lambda: asyncio.create_task(self.final_queue.put(utter)))
+            self._safe_loop_call(self.completion_event.set)
     
     def on_terminated(self, client, event: TerminationEvent):
-        """Handle termination - file logging only"""
         logger.info(
             "STT session terminated",
             extra={
                 "event_type": "session_terminated",
-                "session_id": self.session_id,
-                "total_turns": self.telemetry.turn_count,
-                "session_duration_ms": round((time.time() - self.telemetry.session_start_time) * 1000, 2) if self.telemetry.session_start_time else 0
+                "session_id": self.session_id
             }
         )
-        self.loop.call_soon_threadsafe(self.completion_event.set)
+        # ✅ CHANGED: Use safe loop call
+        self._safe_loop_call(self.completion_event.set)
     
     def on_error(self, client, error: StreamingError):
-        """Handle errors - file logging only"""
+        """✅ FIXED: Safe error handling prevents RuntimeError during shutdown"""
         error_type = type(error).__name__
         error_message = str(error)
         
@@ -481,46 +398,24 @@ class STTCallbackHandler:
                 "event_type": "streaming_error",
                 "session_id": self.session_id,
                 "error_type": error_type,
-                "error_message": error_message,
-                "turn_count": self.telemetry.turn_count,
-                "session_duration_ms": round((time.time() - self.telemetry.session_start_time) * 1000, 2) if self.telemetry.session_start_time else 0
-            },
-            exc_info=True
-        )
-        
-        # ✅ Telemetry (logs to file)
-        self.telemetry.track_error(error_type, error_message, self.session_id)
-        
-        self.error_occurred = True
-        self.loop.call_soon_threadsafe(self.error_event.set)
-        self.loop.call_soon_threadsafe(self.completion_event.set)
-    
-    def reset(self):
-        """Reset handler - logs to file only"""
-        logger.info(
-            "Handler reset for reuse",
-            extra={
-                "event_type": "handler_reset",
-                "previous_session_id": self.session_id
+                "error_message": error_message
             }
         )
         
-        self.result = None
-        self.error_occurred = False
-        self.session_id = None
-        self.completion_event = asyncio.Event()
-        self.error_event = asyncio.Event()
-        self.partial_queue = asyncio.Queue()
-        self.final_queue = asyncio.Queue()
-        self.telemetry = STTTelemetry()
+        self.telemetry.track_error(error_type, error_message, self.session_id)
+        self.error_occurred = True
+        
+        # ✅ FIXED: Safe loop calls prevent RuntimeError
+        self._safe_loop_call(self.error_event.set)
+        self._safe_loop_call(self.completion_event.set)
 
 # -------------------------------
-# ✅ Streaming STT Service with Connection Pooling (33% Faster!)
+# ✅ Fixed Streaming STT Service (Fresh Connections Only)
 # -------------------------------
 class StreamingSTTService:
     """
-    Production streaming STT service with connection pooling for 33% faster performance
-    Creates client once, reuses connection across conversations - no handshake delays!
+    ✅ FIXED: Fresh connections per conversation prevent audio rate limiting
+    No connection pooling to avoid "Audio Transmission Rate Exceeded" errors
     """
     
     def __init__(self, api_key: str, default_timeout: float = 30.0, vad_threshold: float = 0.5):
@@ -528,150 +423,117 @@ class StreamingSTTService:
         self.default_timeout = default_timeout
         self.vad_threshold = vad_threshold
         
-        # External callbacks
         self.on_partial: Optional[Callable[[str], None]] = None
         self.on_final: Optional[Callable[[str], None]] = None
         self.on_session_start: Optional[Callable[[str], None]] = None
         
-        # Audio configuration
         self.sample_rate = 16000
+        self.service_telemetry = STTTelemetry()
         
-        # ✅ CONNECTION POOLING: Create client once during initialization
-        self.client = StreamingClient(
+        logger.info(
+            "Streaming STT service initialized with fresh connections",
+            extra={
+                "event_type": "service_init",
+                "service_type": "streaming_fresh_connections",
+                "connection_pooling": False,  # ✅ CHANGED: Disabled to prevent rate issues
+                "streaming_mode": "standard_reliable",
+                "default_timeout": default_timeout,
+                "vad_threshold": vad_threshold,
+                "sample_rate": self.sample_rate,
+                "fix_applied": "audio_rate_limit_prevention"
+            }
+        )
+        
+    async def capture_speech(self, timeout: float = None) -> str | None:
+        """
+        ✅ FIXED: Fresh connection per conversation prevents rate limiting and RuntimeError
+        """
+        if timeout is None:
+            timeout = self.default_timeout
+            
+        capture_start_time = time.time()
+        terminal_listening()
+        
+        loop = asyncio.get_running_loop()
+        handler = STTCallbackHandler(loop)
+        
+        handler.on_partial_callback = self.on_partial
+        handler.on_final_callback = self.on_final
+        handler.on_session_start_callback = self.on_session_start
+        
+        logger.info(
+            "Starting speech capture with fresh connection",
+            extra={
+                "event_type": "capture_start",
+                "timeout_seconds": timeout,
+                "capture_id": f"capture_{int(capture_start_time)}",
+                "connection_type": "fresh",
+                "rate_limit_prevention": True
+            }
+        )
+        
+        # ✅ CHANGED: Fresh client creation every time (prevents rate accumulation)
+        client = StreamingClient(
             StreamingClientOptions(
                 api_key=self.api_key,
                 api_host="streaming.assemblyai.com",
                 open_timeout=30
             )
         )
-        self.is_connected = False
-        self.connection_params = StreamingParameters(
+        
+        connection_params = StreamingParameters(
             sample_rate=self.sample_rate,
             format_turns=True,
             speech_model="universal-streaming-english",
             vad_threshold=self.vad_threshold
         )
         
-        # Service-level telemetry
-        self.service_telemetry = STTTelemetry()
-        
-        logger.info(
-            "Streaming STT service initialized with connection pooling",
-            extra={
-                "event_type": "service_init",
-                "service_type": "streaming_with_pooling",
-                "connection_pooling": True,
-                "default_timeout": default_timeout,
-                "vad_threshold": vad_threshold,
-                "sample_rate": self.sample_rate,
-                "performance_improvement": "33% faster after first conversation"
-            }
-        )
-        
-    async def capture_speech(self, timeout: float = None) -> str | None:
-        """
-        ✅ EFFICIENT: Reuse connection across conversations - 33% faster after first use!
-        """
-        if timeout is None:
-            timeout = self.default_timeout
-            
-        capture_start_time = time.time()
-        
-        # Get current event loop
-        loop = asyncio.get_running_loop()
-        
-        # Create handler
-        handler = STTCallbackHandler(loop)
-        
-        # Set callbacks
-        handler.on_partial_callback = self.on_partial
-        handler.on_final_callback = self.on_final
-        handler.on_session_start_callback = self.on_session_start
-        
-        logger.info(
-            "Starting speech capture with connection reuse",
-            extra={
-                "event_type": "capture_start",
-                "timeout_seconds": timeout,
-                "capture_id": f"capture_{int(capture_start_time)}",
-                "connection_reused": self.is_connected,
-                "expected_speedup": "33% faster" if self.is_connected else "first_time_setup"
-            }
-        )
-        
-        # ✅ EFFICIENT: Reuse existing client instead of creating new one every time
         final_result = None
         
         try:
-            # ✅ CONNECTION POOLING: Only connect if not already connected
-            if not self.is_connected:
-                logger.info(
-                    "Establishing new connection",
-                    extra={
-                        "event_type": "connection_establish",
-                        "first_time": True,
-                        "setup_time_expected": "500-1000ms"
-                    }
-                )
-                self.client.connect(self.connection_params)
-                self.is_connected = True
-            else:
-                logger.info(
-                    "Reusing existing connection - significant speedup!",
-                    extra={
-                        "event_type": "connection_reuse", 
-                        "latency_saved_ms": "500-1000",
-                        "performance_boost": "33% faster"
-                    }
-                )
+            # ✅ CHANGED: Fresh connection establishment every conversation
+            logger.info(
+                "Establishing fresh connection",
+                extra={
+                    "event_type": "fresh_connection_establish",
+                    "prevents_rate_limit": True
+                }
+            )
             
-            # ✅ Register callbacks on reused client
-            self.client.on(StreamingEvents.Begin, handler.on_begin)
-            self.client.on(StreamingEvents.Turn, handler.on_turn)
-            self.client.on(StreamingEvents.Termination, handler.on_terminated) 
-            self.client.on(StreamingEvents.Error, handler.on_error)
+            client.connect(connection_params)
+            
+            # Register callbacks
+            client.on(StreamingEvents.Begin, handler.on_begin)
+            client.on(StreamingEvents.Turn, handler.on_turn)
+            client.on(StreamingEvents.Termination, handler.on_terminated) 
+            client.on(StreamingEvents.Error, handler.on_error)
 
-            # ✅ Execute with reused connection
             stream_task = None
             partial_task = None
             
             try:
-                # Start microphone streaming with reused connection
-                async def run_microphone_stream():
-                    """Microphone stream using pooled connection"""
+                async def run_standard_stream():
                     try:
+                        logger.info("Starting standard streaming with fresh connection")
                         mic_stream = aai.extras.MicrophoneStream(sample_rate=self.sample_rate)
-                        await asyncio.to_thread(self.client.stream, mic_stream)
+                        await asyncio.to_thread(client.stream, mic_stream)
+                        logger.info("Standard streaming completed successfully")
                     except Exception as e:
-                        logger.error(
-                            "Microphone stream error on pooled connection",
-                            extra={
-                                "event_type": "microphone_error",
-                                "error_type": type(e).__name__,
-                                "error_message": str(e),
-                                "session_id": handler.session_id,
-                                "connection_pooled": True
-                            },
-                            exc_info=True
-                        )
-                        handler.loop.call_soon_threadsafe(handler.error_event.set)
-                        handler.loop.call_soon_threadsafe(handler.completion_event.set)
+                        logger.error(f"Standard streaming error: {e}")
+                        handler._safe_loop_call(handler.error_event.set)
+                        handler._safe_loop_call(handler.completion_event.set)
                 
-                # Start tasks with pooled connection
-                stream_task = asyncio.create_task(run_microphone_stream())
+                stream_task = asyncio.create_task(run_standard_stream())
                 partial_task = asyncio.create_task(self._process_partial_results(handler.partial_queue, handler.session_id))
                 
-                # Wait for completion
                 try:
                     await asyncio.wait_for(handler.completion_event.wait(), timeout=timeout)
                     
-                    # Get result
                     if not handler.final_queue.empty():
                         final_result = await handler.final_queue.get()
                         
-                    # File logging for final result
                     logger.info(
-                        "Final result captured with connection pooling",
+                        "Final result captured with fresh connection",
                         extra={
                             "event_type": "final_result_captured",
                             "session_id": handler.session_id,
@@ -679,274 +541,91 @@ class StreamingSTTService:
                             "word_count": len(final_result.split()) if final_result else 0,
                             "capture_duration_ms": round((time.time() - capture_start_time) * 1000, 2),
                             "success": True,
-                            "connection_pooled": True
+                            "connection_type": "fresh",
+                            "rate_limit_prevented": True
                         }
                     )
                         
-                    # External callbacks
                     if final_result and self.on_final:
                         try:
                             self.on_final(final_result)
                         except Exception as e:
-                            logger.error(
-                                "Final callback execution error",
-                                extra={
-                                    "event_type": "callback_error",
-                                    "session_id": handler.session_id,
-                                    "callback_type": "final",
-                                    "error": str(e)
-                                },
-                                exc_info=True
-                            )
+                            logger.error(f"Final callback error: {e}")
                             
                 except asyncio.TimeoutError:
                     logger.warning(
-                        "STT capture timed out on pooled connection",
+                        "STT capture timed out with fresh connection",
                         extra={
                             "event_type": "capture_timeout",
                             "session_id": handler.session_id,
                             "timeout_seconds": timeout,
-                            "turns_processed": handler.telemetry.turn_count,
-                            "connection_pooled": True
+                            "connection_type": "fresh"
                         }
                     )
                     
             except Exception as e:
                 logger.error(
-                    "STT capture failed on pooled connection",
+                    "STT capture failed with fresh connection",
                     extra={
                         "event_type": "capture_failed",
                         "session_id": handler.session_id,
                         "error_type": type(e).__name__,
                         "error_message": str(e),
-                        "capture_duration_ms": round((time.time() - capture_start_time) * 1000, 2),
-                        "connection_pooled": True
-                    },
-                    exc_info=True
+                        "connection_type": "fresh"
+                    }
                 )
             finally:
-                # Cancel tasks
+                # Cancel tasks safely
                 for task_name, task in [("stream", stream_task), ("partial", partial_task)]:
                     if task and not task.done():
                         task.cancel()
                         try:
                             await task
                         except asyncio.CancelledError:
-                            logger.info(
-                                f"Task cancelled successfully",
-                                extra={
-                                    "event_type": "task_cancelled",
-                                    "task_type": task_name,
-                                    "session_id": handler.session_id
-                                }
-                            )
+                            logger.info(f"{task_name} task cancelled successfully")
                         except Exception as e:
-                            logger.error(
-                                f"Error cancelling {task_name} task",
-                                extra={
-                                    "event_type": "task_cancel_error",
-                                    "task_type": task_name,
-                                    "session_id": handler.session_id,
-                                    "error": str(e)
-                                }
-                            )
+                            logger.error(f"Error cancelling {task_name} task: {e}")
                 
         except Exception as e:
-            # ✅ Handle connection errors - may need to reconnect
-            if "connection" in str(e).lower():
-                logger.warning(
-                    "Connection error detected, will reconnect next time",
-                    extra={
-                        "event_type": "connection_error",
-                        "error": str(e),
-                        "will_reconnect": True
-                    }
-                )
-                self.is_connected = False  # Force reconnect next time
+            logger.error(f"Fresh connection error: {e}")
             raise
             
         finally:
-            # ✅ Telemetry completion
+            # ✅ CRITICAL: Always disconnect to prevent rate accumulation
+            try:
+                client.disconnect(terminate=True)
+                logger.info(
+                    "Fresh connection properly disconnected",
+                    extra={
+                        "event_type": "fresh_connection_disconnected",
+                        "prevents_rate_accumulation": True
+                    }
+                )
+            except Exception as e:
+                logger.error(f"Error disconnecting fresh connection: {e}")
+            
+            # Track telemetry
             handler.telemetry.track_completion(
                 final_result=final_result,
                 success=final_result is not None and not handler.error_occurred
             )
-            
-            # ✅ EFFICIENT CONNECTION POOLING: Keep connection alive instead of terminating!
-            if handler.error_occurred:
-                # Only disconnect if there was an error - force reconnect next time
-                try:
-                    self.client.disconnect(terminate=True)
-                    self.is_connected = False
-                    logger.info(
-                        "Connection terminated due to error - will reconnect next time",
-                        extra={
-                            "event_type": "connection_terminated",
-                            "reason": "error_recovery",
-                            "session_id": handler.session_id
-                        }
-                    )
-                except Exception as e:
-                    logger.error(
-                        "Error disconnecting after failure",
-                        extra={
-                            "event_type": "disconnect_error",
-                            "session_id": handler.session_id,
-                            "error": str(e)
-                        }
-                    )
-            else:
-                # ✅ KEEP CONNECTION ALIVE FOR NEXT CONVERSATION - This is the magic!
-                logger.info(
-                    "Connection kept alive for reuse - next conversation will be 33% faster!",
-                    extra={
-                        "event_type": "connection_kept_alive",
-                        "session_id": handler.session_id,
-                        "ready_for_reuse": True,
-                        "performance_benefit": "33% faster next conversation"
-                    }
-                )
 
         return final_result
     
     async def _process_partial_results(self, partial_queue: asyncio.Queue, session_id: str = None):
-        """Process partials - logs to file only"""
-        logger.info(
-            "Started partial results processor",
-            extra={
-                "event_type": "partial_processor_start",
-                "session_id": session_id
-            }
-        )
-        
         partial_count = 0
         try:
             while True:
                 try:
                     partial = await asyncio.wait_for(partial_queue.get(), timeout=0.1)
                     partial_count += 1
-                    
-                    logger.debug(
-                        "Partial result processed",
-                        extra={
-                            "event_type": "partial_processed",
-                            "session_id": session_id,
-                            "partial_number": partial_count,
-                            "partial_length": len(partial)
-                        }
-                    )
                 except asyncio.TimeoutError:
                     continue
         except asyncio.CancelledError:
-            logger.info(
-                "Partial results processor cancelled",
-                extra={
-                    "event_type": "partial_processor_cancelled",
-                    "session_id": session_id,
-                    "partials_processed": partial_count
-                }
-            )
-
-    def __del__(self):
-        """
-        ✅ Cleanup connection when service is destroyed
-        """
-        if hasattr(self, 'client') and self.is_connected:
-            try:
-                self.client.disconnect(terminate=True)
-                logger.info(
-                    "STT service connection closed on cleanup",
-                    extra={"event_type": "service_cleanup", "connection_pooling": "cleanup_complete"}
-                )
-            except Exception as e:
-                logger.error(f"Error during service cleanup: {e}")
+            logger.info(f"Partial processor cancelled after {partial_count} partials")
 
 # -------------------------------
-# ✅ Batch Service (File Logging Only)
-# -------------------------------
-class BatchSTTService:
-    """Batch processing with file-only logging"""
-    
-    def __init__(self, api_key: str):
-        self.api_key = api_key
-        self.telemetry = STTTelemetry()
-        
-        logger.info(
-            "Batch STT service initialized",
-            extra={
-                "event_type": "service_init",
-                "service_type": "batch"
-            }
-        )
-    
-    def transcribe_file(self, file_path: str) -> str:
-        """File transcription with comprehensive logging to file"""
-        start_time = time.time()
-        
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"Audio file not found: {file_path}")
-        
-        file_size = os.path.getsize(file_path)
-        file_ext = os.path.splitext(file_path)[1].lower()
-        
-        logger.info(
-            "Starting batch file transcription",
-            extra={
-                "event_type": "batch_transcribe_start",
-                "file_path": file_path,
-                "file_size_bytes": file_size,
-                "file_size_mb": round(file_size / (1024 * 1024), 2),
-                "file_extension": file_ext,
-                "transcription_id": f"batch_{int(start_time)}"
-            }
-        )
-        
-        try:
-            transcriber = aai.Transcriber(api_key=self.api_key)
-            transcript = transcriber.transcribe(file_path)
-            
-            if transcript.status == aai.TranscriptStatus.error:
-                raise Exception(f"Transcription failed: {transcript.error}")
-            
-            duration_ms = (time.time() - start_time) * 1000
-            result_text = transcript.text or ""
-            word_count = len(result_text.split()) if result_text else 0
-            
-            logger.info(
-                "Batch transcription completed successfully",
-                extra={
-                    "event_type": "batch_transcribe_complete",
-                    "file_path": file_path,
-                    "duration_ms": round(duration_ms, 2),
-                    "transcript_length": len(result_text),
-                    "word_count": word_count,
-                    "confidence": getattr(transcript, 'confidence', None),
-                    "processing_speed_ratio": round(file_size / (1024 * duration_ms), 3),
-                    "success": True
-                }
-            )
-            
-            return result_text
-            
-        except Exception as e:
-            duration_ms = (time.time() - start_time) * 1000
-            
-            logger.error(
-                "Batch transcription failed",
-                extra={
-                    "event_type": "batch_transcribe_error",
-                    "file_path": file_path,
-                    "duration_ms": round(duration_ms, 2),
-                    "error_type": type(e).__name__,
-                    "error_message": str(e),
-                    "file_size_mb": round(file_size / (1024 * 1024), 2)
-                },
-                exc_info=True
-            )
-            raise
-
-# -------------------------------
-# ✅ Service Instances with Connection Pooling
+# ✅ Service Instances
 # -------------------------------
 streaming_stt_service = StreamingSTTService(
     api_key=API_KEY,
@@ -954,68 +633,36 @@ streaming_stt_service = StreamingSTTService(
     vad_threshold=VAD_THRESHOLD
 )
 
-batch_stt_service = BatchSTTService(api_key=API_KEY)
-
-# ✅ Clean callback functions (no terminal output)
 def on_partial_speech(text: str):
-    """Handle partials - file logging only"""
-    logger.debug(
-        "Partial speech callback triggered",
-        extra={
-            "event_type": "partial_callback",
-            "text_length": len(text),
-            "text_preview": text[:30] + "..." if len(text) > 30 else text
-        }
-    )
+    logger.debug(f"Partial speech: {text[:30]}...")
 
 def on_final_speech(text: str):
-    """Handle finals - file logging only"""
-    logger.info(
-        "Final speech callback triggered",
-        extra={
-            "event_type": "final_callback", 
-            "final_text": text,
-            "text_length": len(text),
-            "word_count": len(text.split())
-        }
-    )
+    logger.info(f"Final speech: {text}")
 
 def on_session_start(session_id: str):
-    """Handle session start - file logging only"""
-    logger.info(
-        "Session start callback triggered",
-        extra={
-            "event_type": "session_start_callback",
-            "session_id": session_id
-        }
-    )
+    logger.info(f"Session started: {session_id}")
 
-# Configure callbacks
 streaming_stt_service.on_partial = on_partial_speech
 streaming_stt_service.on_final = on_final_speech
 streaming_stt_service.on_session_start = on_session_start
 
 # -------------------------------
-# ✅ LangGraph Integration with Connection Pooling
+# ✅ LangGraph Integration
 # -------------------------------
 async def stt_service(state: VoiceState) -> dict:
-    """
-    Production STT wrapper with connection pooling - 33% faster after first use!
-    """
     request_id = f"request_{int(time.time())}"
     
     logger.info(
-        "STT service request started with connection pooling",
+        "STT service request started with fresh connection",
         extra={
             "event_type": "stt_request_start",
             "request_id": request_id,
-            "state_has_messages": bool(getattr(state, "messages", None)),
-            "connection_pooling": True
+            "connection_type": "fresh",
+            "rate_limit_prevention": True
         }
     )
     
     try:
-        # ✅ Clean async call with connection pooling (33% faster!)
         utter_final = await streaming_stt_service.capture_speech()
         
         if not utter_final:
@@ -1023,28 +670,24 @@ async def stt_service(state: VoiceState) -> dict:
                 "No speech captured - timeout occurred",
                 extra={
                     "event_type": "stt_timeout",
-                    "request_id": request_id,
-                    "retry_count": state.get("retry_count", 0)
+                    "request_id": request_id
                 }
             )
-            
             return {
                 "status": "error",
                 "error": {
                     "type": "timeout",
                     "message": "No speech detected. Please try again.",
                     "recoverable": True,
-                    "retry_count": state.get("retry_count", 0),
                     "request_id": request_id
                 }
             }
 
-        # Success
         current_messages = getattr(state, "messages", []) or []
         updated_messages = current_messages + [HumanMessage(content=utter_final)]
         
         logger.info(
-            "STT service request completed successfully with connection pooling",
+            "STT service request completed successfully",
             extra={
                 "event_type": "stt_request_success",
                 "request_id": request_id,
@@ -1052,7 +695,7 @@ async def stt_service(state: VoiceState) -> dict:
                 "utterance_length": len(utter_final),
                 "word_count": len(utter_final.split()),
                 "total_messages": len(updated_messages),
-                "connection_pooling": True
+                "connection_type": "fresh"
             }
         )
         
@@ -1070,14 +713,13 @@ async def stt_service(state: VoiceState) -> dict:
                 "event_type": "stt_connection_error",
                 "request_id": request_id,
                 "error_message": str(e)
-            },
-            exc_info=True
+            }
         )
         return {
             "status": "error",
             "error": {
                 "type": "connection",
-                "message": "Internet connection lost. Switching to offline mode.",
+                "message": "Internet connection lost. Please try again.",
                 "recoverable": True,
                 "original_error": str(e),
                 "request_id": request_id
@@ -1091,8 +733,7 @@ async def stt_service(state: VoiceState) -> dict:
                 "event_type": "stt_permission_error",
                 "request_id": request_id,
                 "error_message": str(e)
-            },
-            exc_info=True
+            }
         )
         return {
             "status": "error", 
@@ -1113,13 +754,12 @@ async def stt_service(state: VoiceState) -> dict:
                 "request_id": request_id,
                 "error_type": type(e).__name__,
                 "error_message": str(e)
-            },
-            exc_info=True
+            }
         )
         return {
             "status": "error",
             "error": {
-                "type": "unknown", 
+                "type": "unknown",
                 "message": f"Unexpected error: {str(e)}",
                 "recoverable": False,
                 "original_error": str(e),
@@ -1127,17 +767,21 @@ async def stt_service(state: VoiceState) -> dict:
             }
         }
 
-# ✅ Log initialization completion with connection pooling
+# ✅ Log initialization completion
 logger.info(
-    "STT service module initialized successfully with connection pooling",
+    "STT service module initialized with critical fixes",
     extra={
         "event_type": "module_init_complete",
         "streaming_service": "ready",
-        "batch_service": "ready", 
         "structured_logging": "file_only",
         "telemetry": "enabled",
         "log_file": "stt_service.log",
-        "connection_pooling": True,
-        "performance_improvement": "33% faster after first conversation"
+        "critical_fixes": {
+            "connection_pooling": False,  # Disabled to prevent rate issues
+            "fresh_connections": True,   # Prevents audio accumulation
+            "safe_event_loop": True,     # Prevents RuntimeError
+            "proper_cleanup": True,      # Always disconnect
+            "rate_limit_prevention": True
+        }
     }
 )
