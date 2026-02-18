@@ -8,3 +8,8 @@ wheels/
 backend/.env
 # Virtual environments
 .venv
+
+Javis.db
+ffmpeg-8.0-essentials_build/
+stt_service.log
+.venv/
