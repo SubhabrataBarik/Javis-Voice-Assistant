@@ -1,7 +1,8 @@
 import asyncio
 import os
 import logging
-from dotenv import load_dotenv  # ✅ Add this import
+from pathlib import Path
+from dotenv import load_dotenv
 from VoiceState import VoiceState
 from elevenlabs.client import ElevenLabs
 from elevenlabs.play import play
@@ -15,10 +16,12 @@ logger = logging.getLogger(__name__)
 # -------------------
 # Setup ElevenLabs client
 # -------------------
-ffmpeg_path = r"D:\PENDRIVE 32 GB\Game\AI_PROJECTS\javis\ffmpeg-8.0-essentials_build\bin"
-os.environ["PATH"] += os.pathsep + ffmpeg_path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+ffmpeg_path = PROJECT_ROOT / "ffmpeg-8.0-essentials_build" / "bin"
+os.environ["PATH"] += os.pathsep + str(ffmpeg_path)
 
 api_key = os.getenv("ELEVENLABS_API_KEY")
+logger.info(f"FFmpeg path set to: {ffmpeg_path}")
 
 # ✅ Validate API key exists
 if not api_key:

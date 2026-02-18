@@ -1,0 +1,295 @@
+2025-11-02 15:54:11,474 | tts_service | ERROR | TTS service error
+Traceback (most recent call last):
+  File "D:\PENDRIVE 32 GB\Game\AI_PROJECTS\javis\backend\tts_service.py", line 78, in tts_service
+    for chunk in audio:
+                 ^^^^^
+  File "D:\PENDRIVE 32 GB\Game\AI_PROJECTS\javis\.venv\Lib\site-packages\elevenlabs\text_to_speech\client.py", line 157, in convert
+    with self._raw_client.convert(
+         ~~~~~~~~~~~~~~~~~~~~~~~~^
+        voice_id,
+        ^^^^^^^^^
+    ...<16 lines>...
+        request_options=request_options,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ) as r:
+    ^
+  File "C:\Python313\Lib\contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "D:\PENDRIVE 32 GB\Game\AI_PROJECTS\javis\.venv\Lib\site-packages\elevenlabs\text_to_speech\raw_client.py", line 204, in convert
+    yield _stream()
+          ~~~~~~~^^
+  File "D:\PENDRIVE 32 GB\Game\AI_PROJECTS\javis\.venv\Lib\site-packages\elevenlabs\text_to_speech\raw_client.py", line 202, in _stream
+    raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+elevenlabs.core.api_error.ApiError: headers: {'date': 'Sun, 02 Nov 2025 10:24:10 GMT', 'server': 'uvicorn', 'content-length': '172', 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'POST, PATCH, OPTIONS, DELETE, GET, PUT', 'access-control-max-age': '600', 'strict-transport-security': 'max-age=31536000; includeSubDomains', 'x-trace-id': '8a5292051874ba1dae551dc032d57fa6', 'x-region': 'us-central1', 'via': '1.1 google, 1.1 google', 'alt-svc': 'h3=":443"; ma=2592000,h3-29=":443"; ma=2592000'}, status_code: 401, body: {'detail': {'status': 'quota_exceeded', 'message': 'This request exceeds your quota of 10000. You have 34 credits remaining, while 147 credits are required for this request.'}}
+2025-11-03 01:17:51,183 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:51,282 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:51,382 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:51,482 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:51,582 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:51,683 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:51,782 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:51,883 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:51,982 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:52,083 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:52,183 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:52,282 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:52,382 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:52,483 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:52,582 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:52,682 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:52,782 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:52,883 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:52,982 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:53,082 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:53,182 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:53,283 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:53,383 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:53,483 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:53,582 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:53,682 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:53,783 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:53,882 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:53,982 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:54,082 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:54,183 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:54,282 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:54,382 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:54,482 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:54,582 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:54,682 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:54,782 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:54,883 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:54,983 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:55,083 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:55,182 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:55,283 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:55,382 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:55,482 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:55,583 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:55,683 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:55,782 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:55,882 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:55,982 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:56,083 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:56,182 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:56,282 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:56,383 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:56,483 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:56,583 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:56,682 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:56,782 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:56,882 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:56,983 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:57,082 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:57,182 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:57,283 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:57,382 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:57,482 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:57,582 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:57,683 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:57,783 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:57,882 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:57,982 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:58,082 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:58,183 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:58,282 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:58,382 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:58,482 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:58,583 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:58,682 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:58,782 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:58,883 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:58,982 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:59,082 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:59,182 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:59,282 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:59,382 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:59,483 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:59,582 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:59,683 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:59,783 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:59,882 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:17:59,982 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:00,083 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:00,183 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:00,282 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:00,383 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:00,483 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:00,582 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:00,682 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:00,782 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:00,882 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:00,983 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:01,082 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:01,182 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:01,282 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:01,382 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:01,482 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:01,582 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:01,682 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:01,782 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:01,882 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:01,982 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:02,082 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:02,182 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:02,282 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:02,382 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:02,483 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:02,582 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:02,682 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:02,782 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:02,882 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:02,982 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:03,082 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:03,182 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:03,283 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:03,382 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:03,482 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:03,582 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:03,683 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:03,783 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:03,882 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:03,982 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:04,083 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:04,182 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:04,282 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:04,382 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:04,482 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:04,583 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:04,682 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:04,782 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:04,883 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:04,982 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:05,082 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:05,182 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:18,844 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:18,944 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:19,044 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:19,143 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:19,243 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:19,343 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:19,444 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:19,543 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:19,651 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:19,744 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:19,844 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:19,944 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:20,044 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:20,143 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:20,244 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:20,343 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:20,443 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:20,544 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:20,643 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:20,743 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:20,843 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:20,943 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:21,043 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:21,143 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:21,243 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:21,344 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:21,443 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:21,543 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:21,643 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:21,744 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:21,844 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:21,943 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:22,044 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:22,144 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:22,243 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:22,343 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:22,444 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:22,544 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:22,643 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:22,743 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:22,843 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:22,943 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:23,044 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:23,143 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:23,243 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:23,344 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:23,443 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:23,544 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:23,643 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:23,743 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:23,844 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:23,943 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:24,043 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:24,144 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:24,243 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:24,344 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:24,443 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:24,543 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:24,644 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:24,743 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:24,843 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:24,944 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:25,043 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:25,143 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:25,243 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:25,344 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:25,444 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:25,543 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:25,644 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:25,743 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:25,844 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:25,943 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-03 01:18:26,043 | stt_service | WARNING | Could not find proper audio send method, using fallback
+2025-11-06 22:43:53,907 | stt_service | ERROR | STT streaming error occurred
+Traceback (most recent call last):
+  File "D:\PENDRIVE 32 GB\Game\AI_PROJECTS\javis\.venv\Lib\site-packages\assemblyai\streaming\v3\client.py", line 163, in _read_message
+    message_data = self._websocket.recv(timeout=1)
+  File "D:\PENDRIVE 32 GB\Game\AI_PROJECTS\javis\.venv\Lib\site-packages\websockets\sync\connection.py", line 336, in recv
+    raise self.protocol.close_exc from self.recv_exc
+websockets.exceptions.ConnectionClosedError: received 3005 (registered) Audio Transmission Rate Exceeded: Received 460.6 sec. audio in 129.793407 sec; then sent 3005 (registered) Audio Transmission Rate Exceeded: Received 460.6 sec. audio in 129.793407 sec
+2025-11-06 22:43:53,910 | stt_service | ERROR | STT streaming error occurred
+Traceback (most recent call last):
+  File "D:\PENDRIVE 32 GB\Game\AI_PROJECTS\javis\.venv\Lib\site-packages\assemblyai\streaming\v3\client.py", line 148, in _write_message
+    self._websocket.send(data)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "D:\PENDRIVE 32 GB\Game\AI_PROJECTS\javis\.venv\Lib\site-packages\websockets\sync\connection.py", line 478, in send
+    with self.send_context():
+         ~~~~~~~~~~~~~~~~~^^
+  File "C:\Python313\Lib\contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "D:\PENDRIVE 32 GB\Game\AI_PROJECTS\javis\.venv\Lib\site-packages\websockets\sync\connection.py", line 1012, in send_context
+    raise self.protocol.close_exc from original_exc
+websockets.exceptions.ConnectionClosedError: received 3005 (registered) Audio Transmission Rate Exceeded: Received 460.6 sec. audio in 129.793407 sec; then sent 3005 (registered) Audio Transmission Rate Exceeded: Received 460.6 sec. audio in 129.793407 sec
+2025-11-06 22:43:53,960 | stt_service | ERROR | STT error tracked in telemetry
+2025-11-06 22:43:53,976 | stt_service | ERROR | STT error tracked in telemetry
+2025-11-06 22:57:36,568 | stt_service | ERROR | STT streaming error occurred
+Traceback (most recent call last):
+  File "D:\PENDRIVE 32 GB\Game\AI_PROJECTS\javis\.venv\Lib\site-packages\assemblyai\streaming\v3\client.py", line 148, in _write_message
+    self._websocket.send(data)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "D:\PENDRIVE 32 GB\Game\AI_PROJECTS\javis\.venv\Lib\site-packages\websockets\sync\connection.py", line 478, in send
+    with self.send_context():
+         ~~~~~~~~~~~~~~~~~^^
+  File "C:\Python313\Lib\contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "D:\PENDRIVE 32 GB\Game\AI_PROJECTS\javis\.venv\Lib\site-packages\websockets\sync\connection.py", line 1012, in send_context
+    raise self.protocol.close_exc from original_exc
+websockets.exceptions.ConnectionClosedError: received 3005 (registered) Audio Transmission Rate Exceeded: Received 547.5 sec. audio in 202.029276 sec; then sent 3005 (registered) Audio Transmission Rate Exceeded: Received 547.5 sec. audio in 202.029276 sec
+2025-11-06 22:57:36,569 | stt_service | ERROR | STT error tracked in telemetry
+2025-11-06 23:01:56,569 | stt_service | ERROR | STT streaming error occurred
+Traceback (most recent call last):
+  File "D:\PENDRIVE 32 GB\Game\AI_PROJECTS\javis\.venv\Lib\site-packages\assemblyai\streaming\v3\client.py", line 163, in _read_message
+    message_data = self._websocket.recv(timeout=1)
+  File "D:\PENDRIVE 32 GB\Game\AI_PROJECTS\javis\.venv\Lib\site-packages\websockets\sync\connection.py", line 336, in recv
+    raise self.protocol.close_exc from self.recv_exc
+websockets.exceptions.ConnectionClosedError: received 3005 (registered) Audio Transmission Rate Exceeded: Received 820.2 sec. audio in 417.704356 sec; then sent 3005 (registered) Audio Transmission Rate Exceeded: Received 820.2 sec. audio in 417.704356 sec
+2025-11-06 23:01:56,569 | stt_service | ERROR | STT streaming error occurred
+Traceback (most recent call last):
+  File "D:\PENDRIVE 32 GB\Game\AI_PROJECTS\javis\.venv\Lib\site-packages\assemblyai\streaming\v3\client.py", line 148, in _write_message
+    self._websocket.send(data)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "D:\PENDRIVE 32 GB\Game\AI_PROJECTS\javis\.venv\Lib\site-packages\websockets\sync\connection.py", line 478, in send
+    with self.send_context():
+         ~~~~~~~~~~~~~~~~~^^
+  File "C:\Python313\Lib\contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "D:\PENDRIVE 32 GB\Game\AI_PROJECTS\javis\.venv\Lib\site-packages\websockets\sync\connection.py", line 1012, in send_context
+    raise self.protocol.close_exc from original_exc
+websockets.exceptions.ConnectionClosedError: received 3005 (registered) Audio Transmission Rate Exceeded: Received 820.2 sec. audio in 417.704356 sec; then sent 3005 (registered) Audio Transmission Rate Exceeded: Received 820.2 sec. audio in 417.704356 sec
+2025-11-06 23:01:56,570 | stt_service | ERROR | STT error tracked in telemetry
+2025-11-06 23:01:56,571 | stt_service | ERROR | STT error tracked in telemetry
